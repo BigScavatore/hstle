@@ -1,100 +1,96 @@
+mod auth;
+mod db;
+mod voice;
+mod ws;
+
 use axum::{
-    extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
-        State,
-    },
-    response::{Html, IntoResponse},
-    routing::get,
-    Router,
+    http::StatusCode,
+    response::{Html, IntoResponse, Response},
+    routing::{get, post},
+    Json, Router,
 };
-use futures_util::{SinkExt, StreamExt};
-use serde::Deserialize;
-use tokio::sync::broadcast::{self, error::RecvError};
+use serde_json::{json, Value};
+use std::sync::{atomic::AtomicU64, Arc, Mutex};
+use tokio::sync::broadcast;
 
-const MAX_NAME: usize = 32;
-const MAX_TEXT: usize = 2000;
-
-/// Stato condiviso: un canale broadcast a cui si iscrive ogni client.
+/// Stato condiviso tra tutte le richieste.
 #[derive(Clone)]
-struct AppState {
-    tx: broadcast::Sender<String>,
+pub struct AppState {
+    pub db: db::Db,
+    /// Canale broadcast: ogni client connesso si iscrive e riceve i nuovi messaggi.
+    pub tx: broadcast::Sender<String>,
+    /// Chi è nel canale vocale (solo in memoria).
+    pub voice: Arc<Mutex<voice::Voice>>,
+    /// Contatore per dare un id a ogni connessione WebSocket.
+    pub next_conn: Arc<AtomicU64>,
+    /// Server STUN/TURN che i client usano per la voce.
+    pub ice: Arc<Value>,
 }
 
-/// Messaggio che arriva dal client.
-#[derive(Deserialize)]
-struct ClientMsg {
-    name: String,
-    text: String,
+/// Errore restituito come JSON `{"error": "..."}` con il codice HTTP indicato.
+pub struct ApiError(pub StatusCode, pub &'static str);
+
+impl ApiError {
+    pub fn internal() -> Self {
+        Self(StatusCode::INTERNAL_SERVER_ERROR, "errore interno")
+    }
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        (self.0, Json(json!({ "error": self.1 }))).into_response()
+    }
+}
+
+/// Server ICE per WebRTC. Di default usa lo STUN pubblico di Google; per un TURN
+/// proprio imposta HSTLE_ICE con un array JSON, per esempio:
+/// [{"urls":["turn:esempio.it:3478"],"username":"u","credential":"p"}]
+fn ice_servers() -> Value {
+    let default = json!([{ "urls": ["stun:stun.l.google.com:19302"] }]);
+    match std::env::var("HSTLE_ICE") {
+        Ok(s) if !s.trim().is_empty() => match serde_json::from_str::<Value>(&s) {
+            Ok(v) if v.is_array() => v,
+            _ => {
+                eprintln!("HSTLE_ICE non è un array JSON valido: uso il default");
+                default
+            }
+        },
+        _ => default,
+    }
 }
 
 #[tokio::main]
 async fn main() {
+    let db_path = std::env::var("HSTLE_DB").unwrap_or_else(|_| "hstle.db".to_string());
+    let db = db::Db::open(&db_path).expect("impossibile aprire il database");
     let (tx, _) = broadcast::channel::<String>(256);
-    let state = AppState { tx };
+
+    let state = AppState {
+        db,
+        tx,
+        voice: Arc::new(Mutex::new(voice::Voice::default())),
+        next_conn: Arc::new(AtomicU64::new(1)),
+        ice: Arc::new(ice_servers()),
+    };
 
     let app = Router::new()
         .route("/", get(index))
-        .route("/ws", get(ws_handler))
+        .route("/api/register", post(auth::register))
+        .route("/api/login", post(auth::login))
+        .route("/api/logout", post(auth::logout))
+        .route("/api/invites", post(auth::create_invite))
+        .route("/ws", get(ws::ws_handler))
         .with_state(state);
 
     let addr = std::env::var("HSTLE_ADDR").unwrap_or_else(|_| "127.0.0.1:3000".to_string());
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .expect("impossibile aprire la porta");
-    println!("Hstle in ascolto su http://{addr}");
+    println!("Hstle in ascolto su http://{addr} (database: {db_path})");
     axum::serve(listener, app).await.expect("errore del server");
 }
 
-/// La pagina di test è incorporata nel binario.
+/// La pagina del client è incorporata nel binario.
 async fn index() -> Html<&'static str> {
     Html(include_str!("../static/index.html"))
-}
-
-async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_socket(socket, state))
-}
-
-async fn handle_socket(socket: WebSocket, state: AppState) {
-    let (mut sender, mut receiver) = socket.split();
-    let mut rx = state.tx.subscribe();
-    let tx = state.tx.clone();
-
-    // Dal broadcast verso questo client
-    let mut send_task = tokio::spawn(async move {
-        loop {
-            match rx.recv().await {
-                Ok(msg) => {
-                    if sender.send(Message::Text(msg.into())).await.is_err() {
-                        break;
-                    }
-                }
-                Err(RecvError::Lagged(_)) => continue, // client lento: salta i messaggi persi
-                Err(RecvError::Closed) => break,
-            }
-        }
-    });
-
-    // Da questo client verso il broadcast
-    let mut recv_task = tokio::spawn(async move {
-        while let Some(Ok(msg)) = receiver.next().await {
-            if let Message::Text(text) = msg {
-                let Ok(m) = serde_json::from_str::<ClientMsg>(&text) else {
-                    continue;
-                };
-                let name: String = m.name.trim().chars().take(MAX_NAME).collect();
-                let body: String = m.text.chars().take(MAX_TEXT).collect();
-                if name.is_empty() || body.trim().is_empty() {
-                    continue;
-                }
-                let out = serde_json::json!({ "t": "message", "name": name, "text": body });
-                let _ = tx.send(out.to_string());
-            }
-        }
-    });
-
-    // Quando uno dei due task finisce (disconnessione), chiudi l'altro
-    tokio::select! {
-        _ = &mut send_task => recv_task.abort(),
-        _ = &mut recv_task => send_task.abort(),
-    }
 }

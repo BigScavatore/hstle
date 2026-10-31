@@ -7,69 +7,744 @@
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
-  body { margin: 0; height: 100vh; display: flex; flex-direction: column;
-         font: 15px system-ui, sans-serif; background: #313338; color: #dbdee1; }
-  header { padding: 12px 16px; background: #2b2d31; font-weight: 600;
-           display: flex; justify-content: space-between; }
-  #status { font-weight: 400; font-size: 13px; color: #949ba4; }
-  #log { flex: 1; overflow-y: auto; padding: 16px; }
-  .msg { margin-bottom: 10px; }
-  .msg b { color: #f2f3f5; margin-right: 8px; }
-  form { display: flex; gap: 8px; padding: 12px 16px; background: #313338; }
-  input { flex: 1; padding: 10px 12px; border: 0; border-radius: 6px;
+  [hidden] { display: none !important; }
+  body { margin: 0; height: 100vh; font: 15px system-ui, sans-serif;
+         background: #313338; color: #dbdee1; }
+  input { padding: 10px 12px; border: 0; border-radius: 6px;
           background: #383a40; color: inherit; font: inherit; }
   button { padding: 10px 16px; border: 0; border-radius: 6px;
            background: #5865f2; color: #fff; font: inherit; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  button.ghost { background: #4e5058; padding: 6px 12px; font-size: 13px; }
+
+  /* login / registrazione */
+  #auth { height: 100%; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #authCard { width: 100%; max-width: 380px; background: #2b2d31; border-radius: 8px;
+              padding: 24px; display: flex; flex-direction: column; gap: 12px; }
+  #authCard h1 { margin: 0 0 4px; font-size: 22px; text-align: center; }
+  .tabs { display: flex; gap: 8px; }
+  .tabs button { flex: 1; background: #383a40; }
+  .tabs button.on { background: #5865f2; }
+  #authForm { display: flex; flex-direction: column; gap: 12px; }
+  #authErr { color: #f23f43; min-height: 1.2em; font-size: 13px; }
+
+  /* struttura dell'app */
+  #app { height: 100%; display: flex; flex-direction: column; }
+  header { padding: 12px 16px; background: #2b2d31; font-weight: 600;
+           display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  header .right { display: flex; align-items: center; gap: 8px; }
+  #status { font-weight: 400; font-size: 13px; color: #949ba4; }
+  #main { flex: 1; display: flex; min-height: 0; }
+
+  /* canale vocale */
+  #voice { width: 300px; flex: none; background: #2b2d31; border-right: 1px solid #1e1f22;
+           display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
+  #voice.active { flex: 2; width: auto; }
+  .vhead { padding: 12px 16px 4px; display: flex; justify-content: space-between; font-weight: 600; }
+  #vcount { color: #949ba4; font-weight: 400; font-size: 13px; }
+  #members { list-style: none; margin: 0; padding: 4px 8px; }
+  #members li { padding: 5px 8px; border-radius: 6px; display: flex; justify-content: space-between;
+                gap: 8px; border: 2px solid transparent; }
+  #members li.speaking { border-color: #23a559; }
+  #members li.empty { color: #949ba4; }
+  #members small { color: #949ba4; }
+  #vnote { padding: 0 16px; color: #f0b232; font-size: 13px; min-height: 0; }
+  #vnote:not(:empty) { padding-bottom: 6px; }
+  #vctl { padding: 8px 16px; display: flex; flex-wrap: wrap; gap: 8px; }
+  #inCall { display: flex; flex-wrap: wrap; gap: 8px; }
+  #vctl button { padding: 8px 12px; font-size: 13px; background: #4e5058; }
+  #vctl button.on { background: #23a559; }
+  #vctl button.off, #vctl button.danger { background: #da373c; }
+  #joinBtn { background: #23a559; }
+
+  #grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+          gap: 8px; padding: 8px 16px 16px; align-content: start; }
+  .tile { position: relative; aspect-ratio: 16 / 9; background: #1e1f22; border-radius: 8px;
+          overflow: hidden; border: 3px solid transparent; }
+  .tile.speaking { border-color: #23a559; }
+  .tile video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .tile.screen video { object-fit: contain; }
+  .tile:not(.hasvideo) video { visibility: hidden; }
+  .tile .ph { position: absolute; inset: 0; display: flex; align-items: center;
+              justify-content: center; font-size: 44px; font-weight: 600; color: #949ba4; }
+  .tile.hasvideo .ph { display: none; }
+  .tile .label { position: absolute; left: 8px; bottom: 6px; padding: 2px 8px; font-size: 13px;
+                 background: rgba(0, 0, 0, .6); border-radius: 4px; }
+
+  /* chat */
+  #chat { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  #voice.active + #chat { flex: 1; min-width: 320px; }
+  #log { flex: 1; overflow-y: auto; padding: 16px; }
+  .msg { margin-bottom: 10px; word-break: break-word; }
+  .msg b { color: #f2f3f5; margin-right: 8px; }
+  .msg time { color: #949ba4; font-size: 12px; margin-right: 8px; }
+  #form { display: flex; gap: 8px; padding: 12px 16px; }
+  #text { flex: 1; min-width: 0; }
+
+  @media (max-width: 800px) {
+    #main { flex-direction: column; }
+    #voice, #voice.active { width: auto; flex: none; max-height: 50vh; border-right: 0;
+                            border-bottom: 1px solid #1e1f22; }
+    #voice.active + #chat { min-width: 0; }
+    #chat { min-height: 0; }
+  }
 </style>
 </head>
 <body>
-<header><span># generale</span><span id="status">connessione…</span></header>
-<div id="log"></div>
-<form id="form">
-  <input id="text" placeholder="Scrivi un messaggio" autocomplete="off" autofocus>
-  <button>Invia</button>
-</form>
-<script>
-const log = document.getElementById('log');
-const status = document.getElementById('status');
-const form = document.getElementById('form');
-const input = document.getElementById('text');
 
-let name = localStorage.getItem('hstle-name');
-if (!name) {
-  name = (prompt('Scegli un nome') || 'anonimo').slice(0, 32);
-  localStorage.setItem('hstle-name', name);
+<div id="auth" hidden>
+  <div id="authCard">
+    <h1>Hstle</h1>
+    <div class="tabs">
+      <button type="button" id="tabLogin" class="on">Accedi</button>
+      <button type="button" id="tabRegister">Registrati</button>
+    </div>
+    <form id="authForm">
+      <input id="u" placeholder="Nome utente" autocomplete="username" required>
+      <input id="p" type="password" placeholder="Password (min. 8 caratteri)" autocomplete="current-password" required>
+      <input id="inv" placeholder="Codice invito (non serve al primo utente)" autocomplete="off" hidden>
+      <button id="authSubmit">Accedi</button>
+      <div id="authErr"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <span>Hstle</span>
+    <span class="right">
+      <span id="status">connessione…</span>
+      <button type="button" class="ghost" id="inviteBtn" hidden>Crea invito</button>
+      <button type="button" class="ghost" id="logoutBtn">Esci</button>
+    </span>
+  </header>
+  <div id="main">
+    <section id="voice">
+      <div class="vhead"><span>Canale vocale</span><span id="vcount"></span></div>
+      <ul id="members"></ul>
+      <div id="vnote"></div>
+      <div id="vctl">
+        <button type="button" id="joinBtn">Entra nel canale vocale</button>
+        <div id="inCall" hidden>
+          <button type="button" id="muteBtn">Microfono acceso</button>
+          <button type="button" id="camBtn">Camera spenta</button>
+          <button type="button" id="scrBtn">Condividi schermo</button>
+          <button type="button" id="leaveBtn" class="danger">Esci</button>
+        </div>
+      </div>
+      <div id="grid"></div>
+    </section>
+    <section id="chat">
+      <div id="log"></div>
+      <form id="form">
+        <input id="text" placeholder="Scrivi in #generale" autocomplete="off">
+        <button>Invia</button>
+      </form>
+    </section>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const TOKEN_KEY = 'hstle-token';
+// Ordine fisso delle tre "corsie" di ogni connessione WebRTC (uguale per entrambi i lati)
+const ROLES = ['mic', 'cam', 'screen'];
+
+let token = localStorage.getItem(TOKEN_KEY);
+let ws, retry, mode = 'login', me = null;
+const seen = new Set();
+
+function show(view) {
+  $('auth').hidden = view !== 'auth';
+  $('app').hidden = view !== 'app';
 }
 
-let ws;
+async function api(path, body, authed) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (authed && token) headers.Authorization = 'Bearer ' + token;
+  const r = await fetch(path, { method: 'POST', headers, body: body ? JSON.stringify(body) : undefined });
+  let data = {};
+  try { data = await r.json(); } catch {}
+  if (!r.ok) throw new Error(data.error || 'errore ' + r.status);
+  return data;
+}
+
+function sendWs(obj) {
+  if (ws && ws.readyState === WebSocket.OPEN) { ws.send(JSON.stringify(obj)); return true; }
+  return false;
+}
+
+/* ================= login / registrazione ================= */
+function setMode(m) {
+  mode = m;
+  $('tabLogin').classList.toggle('on', m === 'login');
+  $('tabRegister').classList.toggle('on', m === 'register');
+  $('inv').hidden = m !== 'register';
+  $('authSubmit').textContent = m === 'login' ? 'Accedi' : 'Crea account';
+  $('p').autocomplete = m === 'login' ? 'current-password' : 'new-password';
+  $('authErr').textContent = '';
+}
+$('tabLogin').onclick = () => setMode('login');
+$('tabRegister').onclick = () => setMode('register');
+
+$('authForm').onsubmit = async (e) => {
+  e.preventDefault();
+  $('authErr').textContent = '';
+  const body = { username: $('u').value, password: $('p').value };
+  if (mode === 'register') body.invite = $('inv').value;
+  try {
+    const d = await api('/api/' + mode, body);
+    token = d.token;
+    localStorage.setItem(TOKEN_KEY, token);
+    $('p').value = '';
+    start();
+  } catch (err) {
+    $('authErr').textContent = err.message;
+  }
+};
+
+/* ================= chat ================= */
+function setStatus(t) { $('status').textContent = t; }
+
+function addMessage(m) {
+  if (seen.has(m.id)) return;           // doppioni tra cronologia e tempo reale
+  seen.add(m.id);
+  const row = document.createElement('div');
+  row.className = 'msg';
+  const time = document.createElement('time');
+  time.textContent = new Date(m.ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const who = document.createElement('b');
+  who.textContent = m.user.username;    // textContent: niente HTML iniettato
+  const body = document.createElement('span');
+  body.textContent = m.text;
+  row.append(time, who, body);
+  $('log').append(row);
+  $('log').scrollTop = $('log').scrollHeight;
+}
+
+function handle(m) {
+  switch (m.t) {
+    case 'error':
+      endSession();
+      $('authErr').textContent = 'Sessione scaduta: accedi di nuovo.';
+      break;
+    case 'ready':
+      me = m.user;
+      if (Array.isArray(m.ice)) voice.ice = m.ice;
+      setStatus('connesso come ' + me.username);
+      $('inviteBtn').hidden = !me.is_admin;
+      renderAll();
+      break;
+    case 'history':
+      $('log').replaceChildren();
+      seen.clear();
+      m.messages.forEach(addMessage);
+      break;
+    case 'message': addMessage(m.message); break;
+    case 'voice_state': onVoiceState(m); break;
+    case 'voice_joined': onVoiceJoined(m); break;
+    case 'voice_error': onVoiceError(m); break;
+    case 'voice_kicked':
+      note('Sei entrato nel canale vocale da un altro dispositivo.');
+      leaveVoice(false);
+      break;
+    case 'signal': onSignal(m); break;
+  }
+}
+
 function connect() {
+  clearTimeout(retry);
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws`);
-  ws.onopen = () => status.textContent = 'connesso come ' + name;
-  ws.onclose = () => { status.textContent = 'riconnessione…'; setTimeout(connect, 2000); };
-  ws.onmessage = (e) => {
-    const m = JSON.parse(e.data);
-    if (m.t !== 'message') return;
-    const row = document.createElement('div');
-    row.className = 'msg';
-    const who = document.createElement('b');
-    who.textContent = m.name;            // textContent: niente HTML iniettato
-    const body = document.createElement('span');
-    body.textContent = m.text;
-    row.append(who, body);
-    log.append(row);
-    log.scrollTop = log.scrollHeight;
+  setStatus('connessione…');
+  voice.lastV = -1;
+  ws.onopen = () => ws.send(JSON.stringify({ t: 'auth', token }));
+  ws.onmessage = (e) => handle(JSON.parse(e.data));
+  ws.onclose = () => {
+    // Senza server la chiamata non è più gestita: la chiudiamo.
+    if (voice.active || voice.joining) leaveVoice(false);
+    voice.members.clear();
+    renderAll();
+    if (!token) return;
+    setStatus('riconnessione…');
+    retry = setTimeout(connect, 2000);
   };
 }
-connect();
 
-form.onsubmit = (e) => {
-  e.preventDefault();
-  const text = input.value.trim();
-  if (!text || ws.readyState !== WebSocket.OPEN) return;
-  ws.send(JSON.stringify({ name, text }));
-  input.value = '';
+function start() { show('app'); connect(); $('text').focus(); }
+
+function endSession() {
+  leaveVoice(true);
+  token = null;
+  me = null;
+  localStorage.removeItem(TOKEN_KEY);
+  clearTimeout(retry);
+  if (ws) ws.close();
+  show('auth');
+}
+
+$('logoutBtn').onclick = async () => {
+  try { await api('/api/logout', null, true); } catch {}
+  endSession();
 };
+
+$('inviteBtn').onclick = async () => {
+  try {
+    const d = await api('/api/invites', null, true);
+    prompt('Codice invito (copialo e mandalo alla persona):', d.code);
+  } catch (err) { alert(err.message); }
+};
+
+$('form').onsubmit = (e) => {
+  e.preventDefault();
+  const text = $('text').value.trim();
+  if (!text) return;
+  if (sendWs({ t: 'send', channel: 1, text })) $('text').value = '';
+};
+
+/* ================= voce e video (WebRTC mesh) =================
+   Ogni partecipante si collega direttamente a tutti gli altri. Il server
+   inoltra solo i messaggi di segnalazione (SDP e candidati ICE) e tiene
+   l'elenco di chi è nel canale; l'audio e il video non passano da lui.
+   Chi entra per ultimo manda l'offerta a chi c'era già.
+   Ogni connessione ha 3 "corsie" fisse: microfono, camera, schermo. Accendere
+   o spegnere camera e schermo cambia solo la traccia: non serve rinegoziare. */
+const voice = {
+  active: false, joining: false,
+  joinV: 0, lastV: -1,
+  members: new Map(),     // id -> {id, username, muted, cam, screen} (stato dal server)
+  peers: new Map(),       // id -> connessione verso quella persona
+  mic: null, cam: null, scr: null,              // tracce locali
+  camStream: null, scrStream: null,
+  ice: [{ urls: ['stun:stun.l.google.com:19302'] }],
+};
+const tiles = new Map();      // chiave 'cam:ID' / 'scr:ID' -> elemento della griglia
+const watchers = new Map();   // chiave 'me' / 'pID' -> analizzatore del volume
+let actx = null;
+let signalChain = Promise.resolve();
+
+function note(text) { $('vnote').textContent = text || ''; }
+
+function ensureAudioCtx() {
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+  } catch {}
+}
+
+/* ---------- interfaccia ---------- */
+function renderMembers() {
+  const ul = $('members');
+  ul.replaceChildren();
+  if (!voice.members.size) {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = 'Nessuno nel canale';
+    ul.append(li);
+  }
+  for (const m of voice.members.values()) {
+    const li = document.createElement('li');
+    li.dataset.id = m.id;
+    if (isSpeaking(m.id)) li.classList.add('speaking');
+    const name = document.createElement('span');
+    name.textContent = m.username + (me && m.id === me.id ? ' (tu)' : '');
+    const badges = document.createElement('small');
+    badges.textContent = [m.muted ? 'muto' : '', m.cam ? 'camera' : '', m.screen ? 'schermo' : '']
+      .filter(Boolean).join(' · ');
+    li.append(name, badges);
+    ul.append(li);
+  }
+  $('vcount').textContent = voice.members.size ? String(voice.members.size) : '';
+}
+
+function renderControls() {
+  const v = voice;
+  $('voice').classList.toggle('active', v.active);
+  $('joinBtn').hidden = v.active;
+  $('joinBtn').disabled = v.joining || !me;
+  $('joinBtn').textContent = v.joining ? 'Connessione…' : 'Entra nel canale vocale';
+  $('inCall').hidden = !v.active;
+  const muted = !v.mic || !v.mic.enabled;
+  $('muteBtn').textContent = muted ? 'Microfono spento' : 'Microfono acceso';
+  $('muteBtn').classList.toggle('off', muted);
+  $('muteBtn').disabled = !v.mic;
+  $('camBtn').textContent = v.cam ? 'Camera accesa' : 'Camera spenta';
+  $('camBtn').classList.toggle('on', !!v.cam);
+  $('scrBtn').textContent = v.scr ? 'Smetti di condividere' : 'Condividi schermo';
+  $('scrBtn').classList.toggle('on', !!v.scr);
+  $('scrBtn').hidden = !(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+}
+
+function makeTile() {
+  const t = document.createElement('div');
+  t.className = 'tile';
+  t.v = document.createElement('video');
+  t.v.autoplay = true;
+  t.v.playsInline = true;
+  t.v.muted = true;            // l'audio degli altri passa da elementi <audio> separati
+  t.ph = document.createElement('div');
+  t.ph.className = 'ph';
+  t.label = document.createElement('span');
+  t.label.className = 'label';
+  t.append(t.v, t.ph, t.label);
+  return t;
+}
+
+function renderTiles() {
+  const wanted = new Map();
+  if (voice.active && me) {
+    wanted.set('cam:' + me.id, { id: me.id, kind: 'cam', stream: voice.camStream, label: me.username + ' (tu)', video: !!voice.cam });
+    if (voice.scr) wanted.set('scr:' + me.id, { id: me.id, kind: 'screen', stream: voice.scrStream, label: 'Il tuo schermo', video: true });
+    for (const [id, peer] of voice.peers) {
+      const m = voice.members.get(id);
+      if (!m) continue;
+      wanted.set('cam:' + id, { id, kind: 'cam', stream: peer.streams.cam, label: m.username, video: m.cam });
+      if (m.screen) wanted.set('scr:' + id, { id, kind: 'screen', stream: peer.streams.screen, label: 'Schermo di ' + m.username, video: true });
+    }
+  }
+  for (const [key, el] of tiles) {
+    if (!wanted.has(key)) { el.v.srcObject = null; el.remove(); tiles.delete(key); }
+  }
+  for (const [key, w] of wanted) {
+    let t = tiles.get(key);
+    if (!t) { t = makeTile(); tiles.set(key, t); $('grid').append(t); }
+    if (t.v.srcObject !== w.stream) t.v.srcObject = w.stream || null;
+    t.classList.toggle('hasvideo', !!(w.video && w.stream));
+    t.classList.toggle('screen', w.kind === 'screen');
+    t.classList.toggle('speaking', w.kind === 'cam' && isSpeaking(w.id));
+    t.label.textContent = w.label;
+    t.ph.textContent = (w.label[0] || '?').toUpperCase();
+    if (t.hasvideo !== t.classList.contains('hasvideo')) {
+      t.hasvideo = t.classList.contains('hasvideo');
+      if (t.hasvideo) t.v.play().catch(() => {});
+    }
+  }
+}
+
+function renderAll() { renderMembers(); renderControls(); renderTiles(); }
+
+/* ---------- chi sta parlando ---------- */
+function isSpeaking(id) {
+  const w = watchers.get(me && id === me.id ? 'me' : 'p' + id);
+  return !!(w && w.speaking);
+}
+
+function applySpeaking() {
+  for (const [key, t] of tiles) {
+    if (key.startsWith('cam:')) t.classList.toggle('speaking', isSpeaking(Number(key.slice(4))));
+  }
+  for (const li of $('members').children) {
+    if (li.dataset.id) li.classList.toggle('speaking', isSpeaking(Number(li.dataset.id)));
+  }
+}
+
+function watchSpeaking(key, stream) {
+  try {
+    ensureAudioCtx();
+    const an = actx.createAnalyser();
+    an.fftSize = 512;
+    actx.createMediaStreamSource(stream).connect(an);   // non collegato alle casse: serve solo a misurare
+    watchers.set(key, { an, buf: new Uint8Array(an.fftSize), last: 0, speaking: false });
+  } catch {}
+}
+
+setInterval(() => {
+  if (!watchers.size) return;
+  const now = performance.now();
+  let changed = false;
+  for (const [key, w] of watchers) {
+    w.an.getByteTimeDomainData(w.buf);
+    let sum = 0;
+    for (const b of w.buf) { const x = (b - 128) / 128; sum += x * x; }
+    if (Math.sqrt(sum / w.buf.length) > 0.03) w.last = now;
+    const silenced = key === 'me' && (!voice.mic || !voice.mic.enabled);
+    const speaking = !silenced && now - w.last < 300;
+    if (speaking !== w.speaking) { w.speaking = speaking; changed = true; }
+  }
+  if (changed) applySpeaking();
+}, 100);
+
+/* ---------- messaggi dal server ---------- */
+function onVoiceState(m) {
+  if (m.v <= voice.lastV) return;       // stato vecchio arrivato in ritardo
+  voice.lastV = m.v;
+  voice.members = new Map(m.members.map((x) => [x.id, x]));
+  // Se il server non mi ha più nel canale (riavvio, uscita da altra scheda), chiudo la chiamata.
+  if (voice.active && m.v >= voice.joinV && me && !voice.members.has(me.id)) {
+    leaveVoice(false);
+    return;
+  }
+  for (const id of [...voice.peers.keys()]) {
+    if (!voice.members.has(id)) closePeer(id);
+  }
+  renderAll();
+}
+
+function onVoiceJoined(m) {
+  voice.joining = false;
+  voice.active = true;
+  voice.joinV = m.v;
+  if (voice.mic) watchSpeaking('me', new MediaStream([voice.mic]));
+  for (const p of m.peers) createPeer(p.id, true);
+  sendMeta();
+  renderAll();
+}
+
+function onVoiceError(m) {
+  voice.joining = false;
+  [voice.mic, voice.cam, voice.scr].forEach((t) => t && t.stop());
+  voice.mic = voice.cam = voice.scr = voice.camStream = voice.scrStream = null;
+  note(m.error || 'Impossibile entrare nel canale vocale.');
+  renderAll();
+}
+
+function sendMeta() {
+  sendWs({
+    t: 'voice_meta',
+    muted: !voice.mic || !voice.mic.enabled,
+    cam: !!voice.cam,
+    screen: !!voice.scr,
+  });
+}
+
+/* ---------- entrare e uscire ---------- */
+async function joinVoice() {
+  if (voice.active || voice.joining || !me) return;
+  if (!navigator.mediaDevices || !window.RTCPeerConnection) {
+    note('Il browser non permette la voce qui: serve una connessione HTTPS (o localhost).');
+    return;
+  }
+  note('');
+  voice.joining = true;
+  ensureAudioCtx();               // va creato subito, mentre il click è "fresco"
+  renderControls();
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+    voice.mic = s.getAudioTracks()[0];
+  } catch {
+    voice.mic = null;
+    note('Microfono non disponibile: entri solo in ascolto.');
+  }
+  if (!sendWs({ t: 'voice_join' })) {
+    voice.joining = false;
+    if (voice.mic) voice.mic.stop();
+    voice.mic = null;
+    note('Non sei connesso al server.');
+    renderAll();
+  }
+}
+
+function leaveVoice(notify = true) {
+  if (notify && (voice.active || voice.joining)) sendWs({ t: 'voice_leave' });
+  for (const id of [...voice.peers.keys()]) closePeer(id);
+  [voice.mic, voice.cam, voice.scr].forEach((t) => t && t.stop());
+  voice.mic = voice.cam = voice.scr = voice.camStream = voice.scrStream = null;
+  watchers.clear();
+  voice.active = voice.joining = false;
+  renderAll();
+}
+
+/* ---------- microfono, camera, schermo ---------- */
+function afterLocalChange() {
+  for (const p of voice.peers.values()) attachLocalTracks(p);
+  sendMeta();
+  renderAll();
+}
+
+function toggleMute() {
+  if (!voice.active || !voice.mic) return;
+  voice.mic.enabled = !voice.mic.enabled;
+  sendMeta();
+  renderAll();
+}
+
+async function toggleCam() {
+  if (!voice.active) return;
+  if (voice.cam) {
+    voice.cam.stop();
+    voice.cam = voice.camStream = null;
+  } else {
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 24 } },
+      });
+      const t = s.getVideoTracks()[0];
+      t.onended = () => { if (voice.cam === t) toggleCam(); };   // camera scollegata
+      voice.cam = t;
+      voice.camStream = new MediaStream([t]);
+    } catch {
+      note('Impossibile accedere alla camera.');
+      return;
+    }
+  }
+  afterLocalChange();
+}
+
+async function toggleScreen() {
+  if (!voice.active) return;
+  if (voice.scr) {
+    voice.scr.stop();
+    voice.scr = voice.scrStream = null;
+  } else {
+    try {
+      const s = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 15 } }, audio: false });
+      const t = s.getVideoTracks()[0];
+      t.contentHint = 'detail';                                   // meglio la nitidezza dei movimenti
+      t.onended = () => { if (voice.scr === t) toggleScreen(); }; // "Interrompi condivisione" del browser
+      voice.scr = t;
+      voice.scrStream = new MediaStream([t]);
+    } catch {
+      return;                                                     // annullato dall'utente
+    }
+  }
+  afterLocalChange();
+}
+
+$('joinBtn').onclick = joinVoice;
+$('leaveBtn').onclick = () => leaveVoice(true);
+$('muteBtn').onclick = toggleMute;
+$('camBtn').onclick = toggleCam;
+$('scrBtn').onclick = toggleScreen;
+
+/* ---------- connessioni WebRTC verso gli altri ---------- */
+function sdpOf(d) { return { type: d.type, sdp: d.sdp }; }
+function sendSignal(to, data) { sendWs({ t: 'signal', to, data }); }
+
+function attachLocalTracks(peer) {
+  const want = [voice.mic, voice.cam, voice.scr];
+  peer.pc.getTransceivers().slice(0, 3).forEach((tr, i) => {
+    const track = want[i] || null;
+    if (tr.sender.track === track) return;
+    tr.sender.replaceTrack(track).then(() => { if (track) limitBitrate(peer, i); }).catch(() => {});
+  });
+}
+
+// Tetti di banda per non saturare l'upload: in mesh ogni flusso viene inviato a tutti.
+const MAX_BITRATE = [64000, 700000, 2500000];
+async function limitBitrate(peer, i) {
+  try {
+    const sender = peer.pc.getTransceivers()[i].sender;
+    const p = sender.getParameters();
+    if (!p.encodings || !p.encodings.length) return;
+    p.encodings[0].maxBitrate = MAX_BITRATE[i];
+    await sender.setParameters(p);
+  } catch {}
+}
+
+function createPeer(id, offerer) {
+  const pc = new RTCPeerConnection({ iceServers: voice.ice });
+  const peer = {
+    id, pc, offerer,
+    session: offerer ? Math.random().toString(36).slice(2) : null,
+    pendingIce: [],
+    streams: { mic: new MediaStream(), cam: new MediaStream(), screen: new MediaStream() },
+    audio: null,
+  };
+  voice.peers.set(id, peer);
+
+  if (offerer) {
+    pc.addTransceiver('audio', { direction: 'sendrecv' });   // corsia 0: microfono
+    pc.addTransceiver('video', { direction: 'sendrecv' });   // corsia 1: camera
+    pc.addTransceiver('video', { direction: 'sendrecv' });   // corsia 2: schermo
+    attachLocalTracks(peer);
+  }
+
+  pc.onicecandidate = (e) => {
+    if (e.candidate) sendSignal(id, { candidate: e.candidate.toJSON() });
+  };
+  pc.ontrack = (e) => {
+    const role = ROLES[pc.getTransceivers().indexOf(e.transceiver)];
+    if (!role) return;
+    peer.streams[role].addTrack(e.track);
+    if (role === 'mic') startRemoteAudio(peer);
+    renderTiles();
+  };
+  pc.onnegotiationneeded = async () => {
+    if (!peer.offerer) return;
+    try { await makeOffer(peer); } catch (err) { console.warn('offerta', err); }
+  };
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === 'connected') ROLES.forEach((_, i) => limitBitrate(peer, i));
+    if (pc.connectionState === 'failed' && peer.offerer) pc.restartIce();
+  };
+  return peer;
+}
+
+function startRemoteAudio(peer) {
+  if (peer.audio) return;
+  const a = new Audio();
+  a.autoplay = true;
+  a.srcObject = peer.streams.mic;
+  a.play().catch(() => {});
+  peer.audio = a;
+  watchSpeaking('p' + peer.id, peer.streams.mic);
+}
+
+function closePeer(id) {
+  const peer = voice.peers.get(id);
+  if (!peer) return;
+  const pc = peer.pc;
+  pc.onicecandidate = pc.ontrack = pc.onnegotiationneeded = pc.onconnectionstatechange = null;
+  pc.close();
+  if (peer.audio) peer.audio.srcObject = null;
+  watchers.delete('p' + id);
+  voice.peers.delete(id);
+  renderTiles();
+}
+
+async function makeOffer(peer) {
+  const pc = peer.pc;
+  if (pc.signalingState !== 'stable') return;
+  await pc.setLocalDescription(await pc.createOffer());
+  sendSignal(peer.id, { sdp: sdpOf(pc.localDescription), session: peer.session });
+}
+
+async function flushIce(peer) {
+  for (const c of peer.pendingIce.splice(0)) {
+    try { await peer.pc.addIceCandidate(c); } catch {}
+  }
+}
+
+// I messaggi vengono elaborati uno alla volta, nell'ordine in cui arrivano.
+function onSignal(m) {
+  signalChain = signalChain.then(() => handleSignal(m.from, m.data)).catch((e) => console.warn('segnale', e));
+}
+
+async function handleSignal(from, data) {
+  if (!voice.active) return;
+  let peer = voice.peers.get(from);
+
+  if (data.sdp && data.sdp.type === 'offer') {
+    // Una sessione diversa dalla nostra conoscenza = la persona si è ricollegata da zero.
+    if (peer && peer.session !== data.session) { closePeer(from); peer = null; }
+    if (!peer) { peer = createPeer(from, false); peer.session = data.session; }
+    const pc = peer.pc;
+    await pc.setRemoteDescription(data.sdp);
+    pc.getTransceivers().slice(0, 3).forEach((t) => { t.direction = 'sendrecv'; });
+    attachLocalTracks(peer);
+    await pc.setLocalDescription(await pc.createAnswer());
+    sendSignal(from, { sdp: sdpOf(pc.localDescription), session: peer.session });
+    await flushIce(peer);
+  } else if (data.sdp && data.sdp.type === 'answer') {
+    if (!peer || data.session !== peer.session) return;
+    await peer.pc.setRemoteDescription(data.sdp);
+    await flushIce(peer);
+  } else if (data.candidate && peer) {
+    if (peer.pc.remoteDescription) {
+      try { await peer.pc.addIceCandidate(data.candidate); } catch {}
+    } else {
+      peer.pendingIce.push(data.candidate);
+    }
+  }
+}
+
+if (!navigator.mediaDevices) {
+  note('Per usare microfono e camera serve HTTPS (o localhost).');
+}
+renderAll();
+token ? start() : show('auth');
 </script>
 </body>
 </html>
