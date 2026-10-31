@@ -1,5 +1,6 @@
 mod auth;
 mod db;
+mod perms;
 mod voice;
 mod ws;
 

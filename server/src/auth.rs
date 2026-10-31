@@ -1,6 +1,6 @@
 use crate::{
     db::{Db, Register, User},
-    ApiError, AppState,
+    perms, ws, ApiError, AppState,
 };
 use argon2::{
     password_hash::{phc::PasswordHash, PasswordHasher, PasswordVerifier},
@@ -128,6 +128,8 @@ pub async fn register(
     match state.db.register(username, hash, invite).await? {
         Register::Ok(user) => {
             let token = new_session(&state.db, user.id).await?;
+            // Il nuovo utente compare subito nell'elenco dei membri di chi è connesso.
+            ws::broadcast_directory(&state).await;
             Ok(Json(AuthResponse { token, user }))
         }
         Register::NameTaken => Err(ApiError(StatusCode::CONFLICT, "nome utente già in uso")),
@@ -181,10 +183,10 @@ pub async fn create_invite(
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let user = require_user(&state, &headers).await?;
-    if !user.is_admin {
+    if !state.db.access(user.id).await?.can(perms::CREATE_INVITES) {
         return Err(ApiError(
             StatusCode::FORBIDDEN,
-            "solo gli admin possono creare inviti",
+            "non hai il permesso di creare inviti",
         ));
     }
     let code = random_hex(8);

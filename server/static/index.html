@@ -36,6 +36,27 @@
   #status { font-weight: 400; font-size: 13px; color: #949ba4; }
   #main { flex: 1; display: flex; min-height: 0; }
 
+  /* canali di testo */
+  #side { width: 200px; flex: none; background: #2b2d31; border-right: 1px solid #1e1f22;
+          display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
+  .shead { padding: 12px 8px 4px 16px; display: flex; justify-content: space-between;
+           align-items: center; font-weight: 600; }
+  button.icon { padding: 2px 8px; background: transparent; color: #b5bac1; font-size: 15px; line-height: 1.3; }
+  button.icon:hover { background: #3f4147; color: #fff; }
+  #chanList { list-style: none; margin: 0; padding: 4px 8px; }
+  #chanList li { display: flex; align-items: center; border-radius: 6px; color: #949ba4; }
+  #chanList li:hover { background: #35373c; }
+  #chanList li.on { background: #404249; color: #fff; }
+  #chanList li.unread { color: #f2f3f5; font-weight: 600; }
+  #chanList .name { flex: 1; min-width: 0; padding: 6px 8px; cursor: pointer; overflow: hidden;
+                    text-overflow: ellipsis; white-space: nowrap; }
+  #chanList li.unread .name::after { content: ' \2022'; color: #f23f43; }
+  #chanList .tools { display: none; flex: none; }
+  #chanList li:hover .tools, #chanList li:focus-within .tools { display: flex; }
+  #sideFoot { margin-top: auto; padding: 12px; }
+  #sideFoot button { width: 100%; }
+  @media (hover: none) { #chanList .tools { display: flex; } }
+
   /* canale vocale */
   #voice { width: 300px; flex: none; background: #2b2d31; border-right: 1px solid #1e1f22;
            display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
@@ -48,6 +69,16 @@
   #members li.speaking { border-color: #23a559; }
   #members li.empty { color: #949ba4; }
   #members small { color: #949ba4; }
+  #members li.vch { display: block; padding: 0; border: 0; }
+  .vch .head { display: flex; align-items: center; border-radius: 6px; color: #949ba4; }
+  .vch .head:hover { background: #35373c; }
+  .vch.on .head { background: #404249; color: #fff; }
+  .vch .name { flex: 1; min-width: 0; padding: 6px 8px; cursor: pointer; overflow: hidden;
+               text-overflow: ellipsis; white-space: nowrap; }
+  .vch .tools { display: none; flex: none; }
+  .vch .head:hover .tools, .vch .head:focus-within .tools { display: flex; }
+  @media (hover: none) { .vch .tools { display: flex; } }
+  ul.vmem { list-style: none; margin: 0; padding: 0 0 4px 16px; }
   #vnote { padding: 0 16px; color: #f0b232; font-size: 13px; min-height: 0; }
   #vnote:not(:empty) { padding-bottom: 6px; }
   #vctl { padding: 8px 16px; display: flex; flex-wrap: wrap; gap: 8px; }
@@ -78,11 +109,64 @@
   .msg { margin-bottom: 10px; word-break: break-word; }
   .msg b { color: #f2f3f5; margin-right: 8px; }
   .msg time { color: #949ba4; font-size: 12px; margin-right: 8px; }
+  .msg .edited { color: #949ba4; font-size: 11px; margin-left: 6px; }
+  .msg .acts { display: none; margin-left: 8px; gap: 4px; vertical-align: middle; }
+  .msg:hover .acts, .msg:focus-within .acts { display: inline-flex; }
+  @media (hover: none) { .msg .acts { display: inline-flex; } }
+  .msg .acts button { padding: 1px 8px; font-size: 12px; background: #4e5058; }
+  .msg .acts button.del:hover { background: #da373c; }
+  .msg .editor { display: inline-flex; gap: 6px; width: min(100%, 560px); vertical-align: middle; }
+  .msg .editor input { flex: 1; min-width: 0; padding: 6px 10px; }
+  .msg .editor button { padding: 6px 10px; font-size: 13px; }
+
+  #toast { position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%); max-width: 90vw;
+           padding: 10px 16px; background: #da373c; color: #fff; border-radius: 6px; z-index: 10;
+           box-shadow: 0 4px 12px rgba(0, 0, 0, .4); }
+
+  input[type=checkbox] { padding: 0; width: 16px; height: 16px; flex: none; accent-color: #5865f2; }
+  input[type=color] { padding: 0; width: 44px; height: 32px; background: none; cursor: pointer; }
+
+  /* finestra ruoli e membri */
+  dialog { border: 0; border-radius: 8px; padding: 0; background: #2b2d31; color: #dbdee1;
+           width: min(780px, 94vw); max-height: 90vh; }
+  dialog[open] { display: flex; flex-direction: column; }
+  dialog::backdrop { background: rgba(0, 0, 0, .6); }
+  .dhead { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px;
+           border-bottom: 1px solid #1e1f22; font-weight: 600; }
+  .dbody { padding: 12px 16px 16px; overflow-y: auto; min-height: 0; }
+  .dbody .tabs { margin-bottom: 12px; }
+  .rgrid { display: grid; grid-template-columns: 220px 1fr; gap: 16px; }
+  #roleList { list-style: none; margin: 0 0 8px; padding: 0; }
+  #roleList li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+  #roleList li:hover { background: #35373c; }
+  #roleList li.on { background: #404249; }
+  #roleList .rname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: #80848e; }
+  #roleEditor { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .field { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .field input:not([type]) { flex: 1; min-width: 0; }
+  .perm { display: flex; gap: 8px; align-items: flex-start; }
+  .perm small { display: block; color: #949ba4; }
+  .btnrow { display: flex; gap: 8px; }
+  button.danger2 { background: #da373c; }
+  .muted { color: #949ba4; margin: 0; }
+  .mrow { padding: 8px 0; border-bottom: 1px solid #1e1f22; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 6px; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; }
   #form { display: flex; gap: 8px; padding: 12px 16px; }
   #text { flex: 1; min-width: 0; }
 
   @media (max-width: 800px) {
     #main { flex-direction: column; }
+    #side { width: auto; flex: none; flex-direction: row; align-items: center; overflow: auto hidden;
+            border-right: 0; border-bottom: 1px solid #1e1f22; }
+    .shead span { display: none; }
+    .shead { padding: 4px 0 4px 8px; }
+    #chanList { display: flex; gap: 4px; padding: 4px 8px; }
+    #chanList li { flex: none; }
+    #sideFoot { margin: 0 8px 0 auto; padding: 0; flex: none; }
+    #sideFoot button { width: auto; }
+    .rgrid { grid-template-columns: 1fr; }
     #voice, #voice.active { width: auto; flex: none; max-height: 50vh; border-right: 0;
                             border-bottom: 1px solid #1e1f22; }
     #voice.active + #chat { min-width: 0; }
@@ -119,12 +203,21 @@
     </span>
   </header>
   <div id="main">
+    <aside id="side">
+      <div class="shead">
+        <span>Canali di testo</span>
+        <button type="button" class="icon" id="addChan" title="Nuovo canale" hidden>+</button>
+      </div>
+      <ul id="chanList"></ul>
+      <div id="sideFoot">
+        <button type="button" class="ghost" id="rolesBtn" hidden>Ruoli e membri</button>
+      </div>
+    </aside>
     <section id="voice">
-      <div class="vhead"><span>Canale vocale</span><span id="vcount"></span></div>
+      <div class="vhead"><span>Canali vocali</span><button type="button" class="icon" id="addVChan" title="Nuovo canale vocale" hidden>+</button></div>
       <ul id="members"></ul>
       <div id="vnote"></div>
       <div id="vctl">
-        <button type="button" id="joinBtn">Entra nel canale vocale</button>
         <div id="inCall" hidden>
           <button type="button" id="muteBtn">Microfono acceso</button>
           <button type="button" id="camBtn">Camera spenta</button>
@@ -137,12 +230,35 @@
     <section id="chat">
       <div id="log"></div>
       <form id="form">
-        <input id="text" placeholder="Scrivi in #generale" autocomplete="off">
+        <input id="text" placeholder="Scrivi un messaggio" autocomplete="off">
         <button>Invia</button>
       </form>
     </section>
   </div>
 </div>
+
+<div id="toast" hidden></div>
+
+<dialog id="rolesDlg">
+  <div class="dhead">
+    <span>Ruoli e membri</span>
+    <button type="button" class="ghost" id="rolesClose">Chiudi</button>
+  </div>
+  <div class="dbody">
+    <div class="tabs">
+      <button type="button" id="rTabRoles" class="on">Ruoli</button>
+      <button type="button" id="rTabMembers">Membri</button>
+    </div>
+    <div id="rolesPane" class="rgrid">
+      <div>
+        <ul id="roleList"></ul>
+        <button type="button" class="ghost" id="newRole">+ Nuovo ruolo</button>
+      </div>
+      <div id="roleEditor"></div>
+    </div>
+    <div id="membersPane" hidden><div id="membersList"></div></div>
+  </div>
+</dialog>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -152,7 +268,18 @@ const ROLES = ['mic', 'cam', 'screen'];
 
 let token = localStorage.getItem(TOKEN_KEY);
 let ws, retry, mode = 'login', me = null;
-const seen = new Set();
+
+// chat: canali, messaggi, ruoli
+let channels = [];                       // [{id, name}]
+let current = Number(localStorage.getItem('hstle-channel')) || null;
+let roles = [];                          // dal più alto al più basso; 'everyone' (id 1) è l'ultimo
+let members = new Map();                 // id -> {id, username, is_admin, roles, perms}
+const store = new Map();                 // id canale -> Map(id messaggio -> messaggio)
+const loaded = new Set();                // canali di cui abbiamo già chiesto la cronologia
+const unread = new Set();                // canali con messaggi non letti
+const deletedIds = new Set();            // messaggi eliminati (evita che una cronologia in ritardo li rimetta)
+let editing = null;                      // {id, draft}: messaggio che sto modificando
+const dlg = $('rolesDlg');
 
 function show(view) {
   $('auth').hidden = view !== 'auth';
@@ -206,22 +333,6 @@ $('authForm').onsubmit = async (e) => {
 /* ================= chat ================= */
 function setStatus(t) { $('status').textContent = t; }
 
-function addMessage(m) {
-  if (seen.has(m.id)) return;           // doppioni tra cronologia e tempo reale
-  seen.add(m.id);
-  const row = document.createElement('div');
-  row.className = 'msg';
-  const time = document.createElement('time');
-  time.textContent = new Date(m.ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const who = document.createElement('b');
-  who.textContent = m.user.username;    // textContent: niente HTML iniettato
-  const body = document.createElement('span');
-  body.textContent = m.text;
-  row.append(time, who, body);
-  $('log').append(row);
-  $('log').scrollTop = $('log').scrollHeight;
-}
-
 function handle(m) {
   switch (m.t) {
     case 'error':
@@ -232,20 +343,42 @@ function handle(m) {
       me = m.user;
       if (Array.isArray(m.ice)) voice.ice = m.ice;
       setStatus('connesso come ' + me.username);
-      $('inviteBtn').hidden = !me.is_admin;
+      resetChat();                       // nuova connessione: si riparte dallo stato del server
       renderAll();
       break;
+    case 'channels': onChannels(m.channels); break;
+    case 'directory': onDirectory(m); break;
     case 'history':
-      $('log').replaceChildren();
-      seen.clear();
-      m.messages.forEach(addMessage);
+      m.messages.forEach(putMsg);
+      if (m.channel === current) renderLog(true);
       break;
-    case 'message': addMessage(m.message); break;
+    case 'message': {
+      const x = m.message;
+      putMsg(x);
+      if (x.channel === current) renderLog();
+      else if (me && x.user.id !== me.id) { unread.add(x.channel); renderChannels(); }
+      break;
+    }
+    case 'message_edited':
+      putMsg(m.message);
+      if (m.message.channel === current) renderLog();
+      break;
+    case 'message_deleted':
+      deletedIds.add(m.id);
+      msgsOf(m.channel).delete(m.id);
+      if (editing && editing.id === m.id) editing = null;
+      if (m.channel === current) renderLog();
+      break;
+    case 'notice':
+      toast(m.error);
+      renderRolesDialog();               // riporta le caselle allo stato reale se la modifica è stata rifiutata
+      break;
     case 'voice_state': onVoiceState(m); break;
+    case 'voice_channels': voice.vchannels = m.channels; renderMembers(); break;
     case 'voice_joined': onVoiceJoined(m); break;
     case 'voice_error': onVoiceError(m); break;
     case 'voice_kicked':
-      note('Sei entrato nel canale vocale da un altro dispositivo.');
+      note(m.reason || 'Sei stato disconnesso dal canale vocale.');
       leaveVoice(false);
       break;
     case 'signal': onSignal(m); break;
@@ -277,6 +410,8 @@ function endSession() {
   leaveVoice(true);
   token = null;
   me = null;
+  if (dlg.open) dlg.close();
+  resetChat();
   localStorage.removeItem(TOKEN_KEY);
   clearTimeout(retry);
   if (ws) ws.close();
@@ -299,8 +434,399 @@ $('form').onsubmit = (e) => {
   e.preventDefault();
   const text = $('text').value.trim();
   if (!text) return;
-  if (sendWs({ t: 'send', channel: 1, text })) $('text').value = '';
+  if (current === null || !can(P.SEND)) return;
+  if (sendWs({ t: 'send', channel: current, text })) $('text').value = '';
 };
+
+/* ================= canali, messaggi, ruoli =================
+   Il server è l'unica autorità: controlla i permessi a ogni azione. Qui li
+   leggiamo (dall'elenco `directory`) solo per mostrare o nascondere i pulsanti. */
+const CHAN_KEY = 'hstle-channel';
+// Stessi bit di src/perms.rs
+const P = { SEND: 1, VOICE: 2, MSGS: 4, CHANNELS: 8, ROLES: 16, INVITES: 32, ADMIN: 64 };
+const PERMS = [
+  [P.SEND, 'Scrivere messaggi', 'Scrivere e modificare i propri messaggi'],
+  [P.VOICE, 'Canale vocale', 'Entrare nel canale vocale'],
+  [P.MSGS, 'Gestire i messaggi', 'Eliminare i messaggi degli altri'],
+  [P.CHANNELS, 'Gestire i canali', 'Creare, rinominare ed eliminare i canali'],
+  [P.ROLES, 'Gestire i ruoli', 'Creare e assegnare ruoli, ma solo quelli più bassi del proprio'],
+  [P.INVITES, 'Creare inviti', 'Generare i codici di invito'],
+  [P.ADMIN, 'Amministratore', 'Ha tutti i permessi'],
+];
+
+function el(tag, props, ...kids) {
+  const e = document.createElement(tag);
+  Object.assign(e, props || {});
+  e.append(...kids);
+  return e;
+}
+
+let toastTimer;
+function toast(text) {
+  const t = $('toast');
+  t.textContent = text;
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, 4500);
+}
+
+function safeColor(c) { return /^#[0-9a-f]{6}$/i.test(c || '') ? c : ''; }
+
+/* ---------- permessi (solo per l'interfaccia) ---------- */
+function myPerms() {
+  const m = me && members.get(me.id);
+  if (m) return m.perms;
+  return me ? (me.is_admin ? 127 : 3) : 0;   // prima che arrivi l'elenco dei membri
+}
+function can(p) { return (myPerms() & p) === p; }
+
+function topPos(m) {                          // posizione del ruolo più alto di un membro
+  if (m.is_admin) return Infinity;
+  let top = 0;
+  for (const r of roles) if (m.roles.includes(r.id)) top = Math.max(top, r.position);
+  return top;
+}
+function outranks(pos) {
+  const m = me && members.get(me.id);
+  if (!m) return !!(me && me.is_admin);
+  return topPos(m) > pos;
+}
+
+function colorOf(uid) {                       // colore del ruolo più alto che ha un colore
+  const m = members.get(uid);
+  if (!m) return '';
+  for (const r of roles) if (r.color && m.roles.includes(r.id)) return safeColor(r.color);
+  return '';
+}
+
+/* ---------- messaggi ---------- */
+function msgsOf(ch) {
+  let s = store.get(ch);
+  if (!s) store.set(ch, (s = new Map()));
+  return s;
+}
+
+function putMsg(m) {
+  if (deletedIds.has(m.id)) return;
+  const s = msgsOf(m.channel);
+  const old = s.get(m.id);
+  if (!old || (m.edited || 0) >= (old.edited || 0)) s.set(m.id, m);   // non tornare a una versione più vecchia
+}
+
+function findMsg(id) {
+  for (const s of store.values()) if (s.has(id)) return s.get(id);
+  return null;
+}
+
+function msgRow(m) {
+  const row = el('div', { className: 'msg' });
+  const who = el('b', { textContent: m.user.username });   // textContent: niente HTML iniettato
+  const col = colorOf(m.user.id);
+  if (col) who.style.color = col;
+  row.append(
+    el('time', { textContent: new Date(m.ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }),
+    who,
+  );
+  if (editing && editing.id === m.id) { row.append(editorEl()); return row; }
+
+  row.append(el('span', { textContent: m.text }));
+  if (m.edited) {
+    row.append(el('small', { className: 'edited', textContent: '(modificato)', title: new Date(m.edited * 1000).toLocaleString() }));
+  }
+  const mine = me && m.user.id === me.id;
+  const canEdit = mine && can(P.SEND);
+  const canDel = mine || can(P.MSGS);
+  if (canEdit || canDel) {
+    const acts = el('span', { className: 'acts' });
+    if (canEdit) acts.append(el('button', { type: 'button', textContent: 'Modifica', onclick: () => startEdit(m) }));
+    if (canDel) acts.append(el('button', { type: 'button', className: 'del', textContent: 'Elimina', onclick: () => deleteMsg(m) }));
+    row.append(acts);
+  }
+  return row;
+}
+
+function editorEl() {
+  const input = el('input', { value: editing.draft, maxLength: 2000, autocomplete: 'off' });
+  input.oninput = () => { editing.draft = input.value; };
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); saveEdit(); }
+    else if (e.key === 'Escape') cancelEdit();
+  };
+  return el('span', { className: 'editor' }, input,
+    el('button', { type: 'button', textContent: 'Salva', onclick: saveEdit }),
+    el('button', { type: 'button', className: 'ghost', textContent: 'Annulla', onclick: cancelEdit }));
+}
+
+function renderLog(toBottom, focusEditor) {
+  const log = $('log');
+  const stick = toBottom || log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+  const hadFocus = log.contains(document.activeElement);
+  const list = current === null ? [] : [...msgsOf(current).values()].sort((a, b) => a.id - b.id).slice(-300);
+  log.replaceChildren(...list.map(msgRow));
+  if (stick) log.scrollTop = log.scrollHeight;
+  if (editing && (focusEditor || hadFocus)) {
+    const i = log.querySelector('.editor input');
+    if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+  }
+}
+
+function startEdit(m) { editing = { id: m.id, draft: m.text }; renderLog(false, true); }
+function cancelEdit() { editing = null; renderLog(); }
+function saveEdit() {
+  if (!editing) return;
+  const text = editing.draft.trim();
+  if (!text) { toast('Il messaggio non può essere vuoto: per toglierlo, eliminalo.'); return; }
+  const m = findMsg(editing.id);
+  if (m && text !== m.text) sendWs({ t: 'edit', id: editing.id, text });
+  editing = null;
+  renderLog();
+}
+function deleteMsg(m) {
+  if (confirm('Eliminare questo messaggio?')) sendWs({ t: 'delete', id: m.id });
+}
+
+/* ---------- canali ---------- */
+function renderChannels() {
+  const ul = $('chanList');
+  ul.replaceChildren();
+  for (const ch of channels) {
+    const name = el('span', { className: 'name', textContent: '# ' + ch.name, tabIndex: 0, onclick: () => selectChannel(ch.id) });
+    name.onkeydown = (e) => { if (e.key === 'Enter') selectChannel(ch.id); };
+    const li = el('li', {}, name);
+    li.classList.toggle('on', ch.id === current);
+    li.classList.toggle('unread', unread.has(ch.id));
+    if (can(P.CHANNELS)) {
+      li.append(el('span', { className: 'tools' },
+        el('button', { type: 'button', className: 'icon', title: 'Rinomina', textContent: '\u270E', onclick: () => renameChannel(ch) }),
+        el('button', { type: 'button', className: 'icon', title: 'Elimina', textContent: '\u2715', onclick: () => deleteChannel(ch) })));
+    }
+    ul.append(li);
+  }
+  $('addChan').hidden = !can(P.CHANNELS);
+  $('rolesBtn').hidden = !can(P.ROLES);
+  $('inviteBtn').hidden = !can(P.INVITES);
+}
+
+function renderComposer() {
+  const ch = channels.find((c) => c.id === current);
+  const ok = can(P.SEND) && !!ch;
+  $('text').disabled = !ok;
+  $('form').querySelector('button').disabled = !ok;
+  $('text').placeholder = !can(P.SEND) ? 'Non hai il permesso di scrivere' : ch ? 'Scrivi in #' + ch.name : 'Scrivi un messaggio';
+}
+
+function selectChannel(id) {
+  current = id;
+  localStorage.setItem(CHAN_KEY, String(id));
+  unread.delete(id);
+  editing = null;
+  if (!loaded.has(id)) {
+    loaded.add(id);
+    sendWs({ t: 'load_history', channel: id });
+  }
+  renderChannels();
+  renderComposer();
+  renderLog(true);
+  if (window.matchMedia('(hover: hover)').matches) $('text').focus();
+}
+
+function onChannels(list) {
+  channels = list;
+  const ids = new Set(list.map((c) => c.id));
+  for (const id of [...store.keys()]) if (!ids.has(id)) store.delete(id);
+  for (const set of [loaded, unread]) for (const id of [...set]) if (!ids.has(id)) set.delete(id);
+  const target = ids.has(current) ? current : (list.length ? list[0].id : null);
+  if (target !== null && (target !== current || !loaded.has(target))) {
+    selectChannel(target);                 // primo elenco della connessione, o il canale aperto non esiste più
+  } else {
+    renderChannels();                      // rinomina / nuovo canale: la vista non si sposta
+    renderComposer();
+  }
+}
+
+$('addChan').onclick = () => {
+  const name = prompt('Nome del nuovo canale (lettere, numeri, - e _):');
+  if (name && name.trim()) sendWs({ t: 'channel_create', name });
+};
+function renameChannel(ch) {
+  const name = prompt('Nuovo nome del canale:', ch.name);
+  if (name && name.trim() && name.trim() !== ch.name) sendWs({ t: 'channel_rename', id: ch.id, name });
+}
+function deleteChannel(ch) {
+  if (confirm('Eliminare #' + ch.name + ' con tutti i suoi messaggi? Non si può annullare.')) {
+    sendWs({ t: 'channel_delete', id: ch.id });
+  }
+}
+
+/* ---------- elenco di ruoli e membri ---------- */
+function onDirectory(d) {
+  roles = d.roles;
+  members = new Map(d.members.map((x) => [x.id, x]));
+  if (me && members.has(me.id)) me.is_admin = members.get(me.id).is_admin;
+  renderChannels();
+  renderComposer();
+  renderLog();                              // colori dei nomi e pulsanti Modifica/Elimina
+  renderMembers();                          // entrare nei canali vocali dipende dai permessi
+  renderControls();
+  renderRolesDialog();
+}
+
+function resetChat() {
+  channels = [];
+  roles = [];
+  members = new Map();
+  store.clear(); loaded.clear(); unread.clear(); deletedIds.clear();
+  editing = null;
+  renderChannels();
+  renderLog(true);
+}
+
+/* ---------- finestra "Ruoli e membri" ---------- */
+let rtab = 'roles';
+let selRole = null;        // id del ruolo aperto, oppure 'new'
+let editorKey = null;      // per non ricostruire il modulo (e perdere le modifiche) a ogni aggiornamento
+
+$('rolesBtn').onclick = () => {
+  rtab = 'roles';
+  selRole = null;
+  editorKey = null;
+  dlg.showModal();
+  renderRolesDialog();
+};
+$('rolesClose').onclick = () => dlg.close();
+dlg.onclick = (e) => { if (e.target === dlg) dlg.close(); };   // clic sullo sfondo
+$('rTabRoles').onclick = () => { rtab = 'roles'; renderRolesDialog(); };
+$('rTabMembers').onclick = () => { rtab = 'members'; renderRolesDialog(); };
+$('newRole').onclick = () => { selRole = 'new'; renderRolesDialog(); };
+
+function renderRolesDialog() {
+  if (!dlg.open) return;
+  if (!can(P.ROLES)) { dlg.close(); return; }
+  if (selRole !== null && selRole !== 'new' && !roles.some((r) => r.id === selRole)) {
+    selRole = null;
+    editorKey = null;
+  }
+  $('rTabRoles').classList.toggle('on', rtab === 'roles');
+  $('rTabMembers').classList.toggle('on', rtab === 'members');
+  $('rolesPane').hidden = rtab !== 'roles';
+  $('membersPane').hidden = rtab !== 'members';
+  renderRoleList();
+  renderRoleEditor();
+  renderUserRoles();
+}
+
+function canManageRole(r) { return can(P.ROLES) && outranks(r.position); }
+
+function renderRoleList() {
+  const ul = $('roleList');
+  ul.replaceChildren();
+  for (const r of roles) {
+    const dot = el('span', { className: 'dot' });
+    if (safeColor(r.color)) dot.style.background = r.color;
+    const li = el('li', { onclick: () => { selRole = r.id; renderRolesDialog(); } },
+      dot, el('span', { className: 'rname', textContent: r.id === 1 ? '@everyone' : r.name }));
+    li.classList.toggle('on', r.id === selRole);
+    if (r.id !== 1 && canManageRole(r)) {
+      const move = (up) => (e) => { e.stopPropagation(); sendWs({ t: 'role_move', id: r.id, up }); };
+      li.append(
+        el('button', { type: 'button', className: 'icon', title: 'Sposta in alto', textContent: '\u25B2', onclick: move(true) }),
+        el('button', { type: 'button', className: 'icon', title: 'Sposta in basso', textContent: '\u25BC', onclick: move(false) }));
+    }
+    ul.append(li);
+  }
+  $('newRole').hidden = !can(P.ROLES);
+}
+
+function renderRoleEditor() {
+  const key = String(selRole);
+  if (editorKey === key) return;
+  editorKey = key;
+  const box = $('roleEditor');
+  box.replaceChildren();
+  const isNew = selRole === 'new';
+  const r = isNew
+    ? { id: 0, name: '', color: '', permissions: P.SEND | P.VOICE, position: 0 }
+    : roles.find((x) => x.id === selRole);
+  if (!r) { box.append(el('p', { className: 'muted', textContent: 'Scegli un ruolo per vederlo o modificarlo.' })); return; }
+
+  const editable = isNew ? can(P.ROLES) : canManageRole(r);
+  const fixed = r.id === 1;                  // di everyone si cambiano solo i permessi
+  const name = el('input', { value: fixed ? '@everyone' : r.name, placeholder: 'Nome del ruolo', maxLength: 32, disabled: !editable || fixed });
+  const none = el('input', { type: 'checkbox', checked: !safeColor(r.color), disabled: !editable });
+  const color = el('input', { type: 'color', value: safeColor(r.color) || '#99aab5', disabled: !editable });
+  if (!fixed) {
+    box.append(
+      el('div', { className: 'field' }, name),
+      el('div', { className: 'field' }, color, el('label', { className: 'chip' }, none, 'Nessun colore')));
+  } else {
+    box.append(el('p', { className: 'muted', textContent: 'Vale per tutti i membri, anche senza altri ruoli.' }));
+  }
+  for (const [bit, label, hint] of PERMS) {
+    const cb = el('input', { type: 'checkbox', checked: (r.permissions & bit) !== 0, disabled: !editable || (myPerms() & bit) === 0 });
+    cb.dataset.bit = String(bit);
+    box.append(el('label', { className: 'perm' }, cb,
+      el('span', {}, label, el('small', { textContent: hint }))));
+  }
+  const row = el('div', { className: 'btnrow' });
+  if (editable) {
+    row.append(el('button', {
+      type: 'button',
+      textContent: isNew ? 'Crea ruolo' : 'Salva',
+      onclick: () => {
+        let bits = 0;
+        for (const cb of box.querySelectorAll('input[data-bit]')) if (cb.checked) bits |= Number(cb.dataset.bit);
+        const body = { name: name.value, color: none.checked ? '' : color.value, permissions: bits };
+        if (isNew) {
+          sendWs({ t: 'role_create', ...body });
+          selRole = null;
+          editorKey = null;
+          renderRolesDialog();
+        } else {
+          sendWs({ t: 'role_edit', id: r.id, ...body });
+          editorKey = null;                  // si ricostruisce con i valori salvati all'arrivo dell'elenco
+        }
+      },
+    }));
+    if (!isNew && !fixed) {
+      row.append(el('button', {
+        type: 'button', className: 'danger2', textContent: 'Elimina',
+        onclick: () => {
+          if (!confirm('Eliminare il ruolo "' + r.name + '"? Lo perderanno tutti i membri che lo hanno.')) return;
+          sendWs({ t: 'role_delete', id: r.id });
+          selRole = null;
+          editorKey = null;
+        },
+      }));
+    }
+  } else {
+    row.append(el('p', { className: 'muted', textContent: 'Non puoi modificare questo ruolo: è allo stesso livello del tuo o più in alto.' }));
+  }
+  box.append(row);
+}
+
+function renderUserRoles() {
+  const box = $('membersList');
+  box.replaceChildren();
+  const assignable = roles.filter((r) => r.id !== 1);
+  for (const mem of members.values()) {
+    const title = mem.username + (me && mem.id === me.id ? ' (tu)' : '') + (mem.is_admin ? ' \u2013 proprietario' : '');
+    const chips = el('div', { className: 'chips' });
+    const mayEdit = can(P.ROLES) && !mem.is_admin && ((me && mem.id === me.id) || outranks(topPos(mem)));
+    for (const r of assignable) {
+      const cb = el('input', { type: 'checkbox', checked: mem.roles.includes(r.id), disabled: !mayEdit || !outranks(r.position) });
+      cb.onchange = () => {
+        const next = new Set(mem.roles);
+        if (cb.checked) next.add(r.id); else next.delete(r.id);
+        sendWs({ t: 'member_roles', user: mem.id, roles: [...next] });
+      };
+      const dot = el('span', { className: 'dot' });
+      if (safeColor(r.color)) dot.style.background = r.color;
+      chips.append(el('label', { className: 'chip' }, cb, dot, r.name));
+    }
+    if (!assignable.length) chips.append(el('span', { className: 'muted', textContent: 'Nessun ruolo creato.' }));
+    box.append(el('div', { className: 'mrow' }, el('b', { textContent: title }), chips));
+  }
+}
 
 /* ================= voce e video (WebRTC mesh) =================
    Ogni partecipante si collega direttamente a tutti gli altri. Il server
@@ -311,6 +837,8 @@ $('form').onsubmit = (e) => {
    o spegnere camera e schermo cambia solo la traccia: non serve rinegoziare. */
 const voice = {
   active: false, joining: false,
+  channel: null,          // canale vocale in cui sono
+  vchannels: [],          // [{id, name}]
   joinV: 0, lastV: -1,
   members: new Map(),     // id -> {id, username, muted, cam, screen} (stato dal server)
   peers: new Map(),       // id -> connessione verso quella persona
@@ -336,33 +864,54 @@ function ensureAudioCtx() {
 function renderMembers() {
   const ul = $('members');
   ul.replaceChildren();
-  if (!voice.members.size) {
-    const li = document.createElement('li');
-    li.className = 'empty';
-    li.textContent = 'Nessuno nel canale';
+  $('addVChan').hidden = !can(P.CHANNELS);
+  if (!voice.vchannels.length) ul.append(el('li', { className: 'empty', textContent: 'Nessun canale vocale' }));
+  for (const ch of voice.vchannels) {
+    const name = el('span', {
+      className: 'name', tabIndex: 0, textContent: '\uD83D\uDD0A ' + ch.name,
+      title: can(P.VOICE) ? 'Entra nel canale' : 'Non hai il permesso di entrare nei canali vocali',
+    });
+    const enter = () => {
+      if (!can(P.VOICE)) { toast('Non hai il permesso di entrare nei canali vocali.'); return; }
+      joinVoice(ch.id);
+    };
+    name.onclick = enter;
+    name.onkeydown = (e) => { if (e.key === 'Enter') enter(); };
+    const head = el('div', { className: 'head' }, name);
+    if (can(P.CHANNELS)) {
+      head.append(el('span', { className: 'tools' },
+        el('button', { type: 'button', className: 'icon', title: 'Rinomina', textContent: '\u270E', onclick: () => renameVChannel(ch) }),
+        el('button', { type: 'button', className: 'icon', title: 'Elimina', textContent: '\u2715', onclick: () => deleteVChannel(ch) })));
+    }
+    const mem = el('ul', { className: 'vmem' });
+    for (const m of voice.members.values()) {
+      if (m.channel !== ch.id) continue;
+      const li = el('li', {},
+        el('span', { textContent: m.username + (me && m.id === me.id ? ' (tu)' : '') }),
+        el('small', { textContent: [m.muted ? 'muto' : '', m.cam ? 'camera' : '', m.screen ? 'schermo' : ''].filter(Boolean).join(' \u00B7 ') }));
+      li.dataset.id = m.id;
+      if (isSpeaking(m.id)) li.classList.add('speaking');
+      mem.append(li);
+    }
+    const li = el('li', { className: 'vch' }, head, mem);
+    li.classList.toggle('on', voice.active && voice.channel === ch.id);
     ul.append(li);
   }
-  for (const m of voice.members.values()) {
-    const li = document.createElement('li');
-    li.dataset.id = m.id;
-    if (isSpeaking(m.id)) li.classList.add('speaking');
-    const name = document.createElement('span');
-    name.textContent = m.username + (me && m.id === me.id ? ' (tu)' : '');
-    const badges = document.createElement('small');
-    badges.textContent = [m.muted ? 'muto' : '', m.cam ? 'camera' : '', m.screen ? 'schermo' : '']
-      .filter(Boolean).join(' · ');
-    li.append(name, badges);
-    ul.append(li);
+}
+
+function renameVChannel(ch) {
+  const name = prompt('Nuovo nome del canale vocale:', ch.name);
+  if (name && name.trim() && name.trim() !== ch.name) sendWs({ t: 'voice_channel_rename', id: ch.id, name });
+}
+function deleteVChannel(ch) {
+  if (confirm('Eliminare il canale vocale ' + ch.name + '? Chi è dentro verrà disconnesso.')) {
+    sendWs({ t: 'voice_channel_delete', id: ch.id });
   }
-  $('vcount').textContent = voice.members.size ? String(voice.members.size) : '';
 }
 
 function renderControls() {
   const v = voice;
   $('voice').classList.toggle('active', v.active);
-  $('joinBtn').hidden = v.active;
-  $('joinBtn').disabled = v.joining || !me;
-  $('joinBtn').textContent = v.joining ? 'Connessione…' : 'Entra nel canale vocale';
   $('inCall').hidden = !v.active;
   const muted = !v.mic || !v.mic.enabled;
   $('muteBtn').textContent = muted ? 'Microfono spento' : 'Microfono acceso';
@@ -433,8 +982,8 @@ function applySpeaking() {
   for (const [key, t] of tiles) {
     if (key.startsWith('cam:')) t.classList.toggle('speaking', isSpeaking(Number(key.slice(4))));
   }
-  for (const li of $('members').children) {
-    if (li.dataset.id) li.classList.toggle('speaking', isSpeaking(Number(li.dataset.id)));
+  for (const li of document.querySelectorAll('#members li[data-id]')) {
+    li.classList.toggle('speaking', isSpeaking(Number(li.dataset.id)));
   }
 }
 
@@ -475,7 +1024,8 @@ function onVoiceState(m) {
     return;
   }
   for (const id of [...voice.peers.keys()]) {
-    if (!voice.members.has(id)) closePeer(id);
+    const pm = voice.members.get(id);
+    if (!pm || pm.channel !== voice.channel) closePeer(id);
   }
   renderAll();
 }
@@ -484,6 +1034,7 @@ function onVoiceJoined(m) {
   voice.joining = false;
   voice.active = true;
   voice.joinV = m.v;
+  voice.channel = m.channel;
   if (voice.mic) watchSpeaking('me', new MediaStream([voice.mic]));
   for (const p of m.peers) createPeer(p.id, true);
   sendMeta();
@@ -508,8 +1059,12 @@ function sendMeta() {
 }
 
 /* ---------- entrare e uscire ---------- */
-async function joinVoice() {
-  if (voice.active || voice.joining || !me) return;
+async function joinVoice(channel) {
+  if (voice.joining || !me || !can(P.VOICE)) return;
+  if (voice.active) {
+    if (voice.channel === channel) return;
+    leaveVoice(true);                 // cambio canale: esco dal vecchio ed entro nel nuovo
+  }
   if (!navigator.mediaDevices || !window.RTCPeerConnection) {
     note('Il browser non permette la voce qui: serve una connessione HTTPS (o localhost).');
     return;
@@ -527,7 +1082,7 @@ async function joinVoice() {
     voice.mic = null;
     note('Microfono non disponibile: entri solo in ascolto.');
   }
-  if (!sendWs({ t: 'voice_join' })) {
+  if (!sendWs({ t: 'voice_join', channel })) {
     voice.joining = false;
     if (voice.mic) voice.mic.stop();
     voice.mic = null;
@@ -543,6 +1098,7 @@ function leaveVoice(notify = true) {
   voice.mic = voice.cam = voice.scr = voice.camStream = voice.scrStream = null;
   watchers.clear();
   voice.active = voice.joining = false;
+  voice.channel = null;
   renderAll();
 }
 
@@ -602,7 +1158,10 @@ async function toggleScreen() {
   afterLocalChange();
 }
 
-$('joinBtn').onclick = joinVoice;
+$('addVChan').onclick = () => {
+  const name = prompt('Nome del nuovo canale vocale (lettere, numeri, - e _):');
+  if (name && name.trim()) sendWs({ t: 'voice_channel_create', name });
+};
 $('leaveBtn').onclick = () => leaveVoice(true);
 $('muteBtn').onclick = toggleMute;
 $('camBtn').onclick = toggleCam;
