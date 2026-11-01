@@ -2,257 +2,139 @@
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0c0915">
 <title>Hstle</title>
-<style>
-  :root { color-scheme: dark; }
-  * { box-sizing: border-box; }
-  [hidden] { display: none !important; }
-  body { margin: 0; height: 100vh; font: 15px system-ui, sans-serif;
-         background: #313338; color: #dbdee1; }
-  input { padding: 10px 12px; border: 0; border-radius: 6px;
-          background: #383a40; color: inherit; font: inherit; }
-  button { padding: 10px 16px; border: 0; border-radius: 6px;
-           background: #5865f2; color: #fff; font: inherit; cursor: pointer; }
-  button:disabled { opacity: .5; cursor: default; }
-  button.ghost { background: #4e5058; padding: 6px 12px; font-size: 13px; }
-
-  /* login / registrazione */
-  #auth { height: 100%; display: flex; align-items: center; justify-content: center; padding: 16px; }
-  #authCard { width: 100%; max-width: 380px; background: #2b2d31; border-radius: 8px;
-              padding: 24px; display: flex; flex-direction: column; gap: 12px; }
-  #authCard h1 { margin: 0 0 4px; font-size: 22px; text-align: center; }
-  .tabs { display: flex; gap: 8px; }
-  .tabs button { flex: 1; background: #383a40; }
-  .tabs button.on { background: #5865f2; }
-  #authForm { display: flex; flex-direction: column; gap: 12px; }
-  #authErr { color: #f23f43; min-height: 1.2em; font-size: 13px; }
-
-  /* struttura dell'app */
-  #app { height: 100%; display: flex; flex-direction: column; }
-  header { padding: 12px 16px; background: #2b2d31; font-weight: 600;
-           display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-  header .right { display: flex; align-items: center; gap: 8px; }
-  #status { font-weight: 400; font-size: 13px; color: #949ba4; }
-  #main { flex: 1; display: flex; min-height: 0; }
-
-  /* canali di testo */
-  #side { width: 200px; flex: none; background: #2b2d31; border-right: 1px solid #1e1f22;
-          display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
-  .shead { padding: 12px 8px 4px 16px; display: flex; justify-content: space-between;
-           align-items: center; font-weight: 600; }
-  button.icon { padding: 2px 8px; background: transparent; color: #b5bac1; font-size: 15px; line-height: 1.3; }
-  button.icon:hover { background: #3f4147; color: #fff; }
-  #chanList { list-style: none; margin: 0; padding: 4px 8px; }
-  #chanList li { display: flex; align-items: center; border-radius: 6px; color: #949ba4; }
-  #chanList li:hover { background: #35373c; }
-  #chanList li.on { background: #404249; color: #fff; }
-  #chanList li.unread { color: #f2f3f5; font-weight: 600; }
-  #chanList .name { flex: 1; min-width: 0; padding: 6px 8px; cursor: pointer; overflow: hidden;
-                    text-overflow: ellipsis; white-space: nowrap; }
-  #chanList li.unread .name::after { content: ' \2022'; color: #f23f43; }
-  #chanList .tools { display: none; flex: none; }
-  #chanList li:hover .tools, #chanList li:focus-within .tools { display: flex; }
-  #sideFoot { margin-top: auto; padding: 12px; }
-  #sideFoot button { width: 100%; }
-  @media (hover: none) { #chanList .tools { display: flex; } }
-
-  /* canale vocale */
-  #voice { width: 300px; flex: none; background: #2b2d31; border-right: 1px solid #1e1f22;
-           display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
-  #voice.active { flex: 2; width: auto; }
-  .vhead { padding: 12px 16px 4px; display: flex; justify-content: space-between; font-weight: 600; }
-  #vcount { color: #949ba4; font-weight: 400; font-size: 13px; }
-  #members { list-style: none; margin: 0; padding: 4px 8px; }
-  #members li { padding: 5px 8px; border-radius: 6px; display: flex; justify-content: space-between;
-                gap: 8px; border: 2px solid transparent; }
-  #members li.speaking { border-color: #23a559; }
-  #members li.empty { color: #949ba4; }
-  #members small { color: #949ba4; }
-  #members li.vch { display: block; padding: 0; border: 0; }
-  .vch .head { display: flex; align-items: center; border-radius: 6px; color: #949ba4; }
-  .vch .head:hover { background: #35373c; }
-  .vch.on .head { background: #404249; color: #fff; }
-  .vch .name { flex: 1; min-width: 0; padding: 6px 8px; cursor: pointer; overflow: hidden;
-               text-overflow: ellipsis; white-space: nowrap; }
-  .vch .tools { display: none; flex: none; }
-  .vch .head:hover .tools, .vch .head:focus-within .tools { display: flex; }
-  @media (hover: none) { .vch .tools { display: flex; } }
-  ul.vmem { list-style: none; margin: 0; padding: 0 0 4px 16px; }
-  #vnote { padding: 0 16px; color: #f0b232; font-size: 13px; min-height: 0; }
-  #vnote:not(:empty) { padding-bottom: 6px; }
-  #vctl { padding: 8px 16px; display: flex; flex-wrap: wrap; gap: 8px; }
-  #inCall { display: flex; flex-wrap: wrap; gap: 8px; }
-  #vctl button { padding: 8px 12px; font-size: 13px; background: #4e5058; }
-  #vctl button.on { background: #23a559; }
-  #vctl button.off, #vctl button.danger { background: #da373c; }
-  #joinBtn { background: #23a559; }
-
-  #grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-          gap: 8px; padding: 8px 16px 16px; align-content: start; }
-  .tile { position: relative; aspect-ratio: 16 / 9; background: #1e1f22; border-radius: 8px;
-          overflow: hidden; border: 3px solid transparent; }
-  .tile.speaking { border-color: #23a559; }
-  .tile video { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .tile.screen video { object-fit: contain; }
-  .tile:not(.hasvideo) video { visibility: hidden; }
-  .tile .ph { position: absolute; inset: 0; display: flex; align-items: center;
-              justify-content: center; font-size: 44px; font-weight: 600; color: #949ba4; }
-  .tile.hasvideo .ph { display: none; }
-  .tile .label { position: absolute; left: 8px; bottom: 6px; padding: 2px 8px; font-size: 13px;
-                 background: rgba(0, 0, 0, .6); border-radius: 4px; }
-
-  /* chat */
-  #chat { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-  #voice.active + #chat { flex: 1; min-width: 320px; }
-  #log { flex: 1; overflow-y: auto; padding: 16px; }
-  .msg { margin-bottom: 10px; word-break: break-word; }
-  .msg b { color: #f2f3f5; margin-right: 8px; }
-  .msg time { color: #949ba4; font-size: 12px; margin-right: 8px; }
-  .msg .edited { color: #949ba4; font-size: 11px; margin-left: 6px; }
-  .msg .acts { display: none; margin-left: 8px; gap: 4px; vertical-align: middle; }
-  .msg:hover .acts, .msg:focus-within .acts { display: inline-flex; }
-  @media (hover: none) { .msg .acts { display: inline-flex; } }
-  .msg .acts button { padding: 1px 8px; font-size: 12px; background: #4e5058; }
-  .msg .acts button.del:hover { background: #da373c; }
-  .msg .editor { display: inline-flex; gap: 6px; width: min(100%, 560px); vertical-align: middle; }
-  .msg .editor input { flex: 1; min-width: 0; padding: 6px 10px; }
-  .msg .editor button { padding: 6px 10px; font-size: 13px; }
-
-  #toast { position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%); max-width: 90vw;
-           padding: 10px 16px; background: #da373c; color: #fff; border-radius: 6px; z-index: 10;
-           box-shadow: 0 4px 12px rgba(0, 0, 0, .4); }
-
-  input[type=checkbox] { padding: 0; width: 16px; height: 16px; flex: none; accent-color: #5865f2; }
-  input[type=color] { padding: 0; width: 44px; height: 32px; background: none; cursor: pointer; }
-
-  /* finestra ruoli e membri */
-  dialog { border: 0; border-radius: 8px; padding: 0; background: #2b2d31; color: #dbdee1;
-           width: min(780px, 94vw); max-height: 90vh; }
-  dialog[open] { display: flex; flex-direction: column; }
-  dialog::backdrop { background: rgba(0, 0, 0, .6); }
-  .dhead { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px;
-           border-bottom: 1px solid #1e1f22; font-weight: 600; }
-  .dbody { padding: 12px 16px 16px; overflow-y: auto; min-height: 0; }
-  .dbody .tabs { margin-bottom: 12px; }
-  .rgrid { display: grid; grid-template-columns: 220px 1fr; gap: 16px; }
-  #roleList { list-style: none; margin: 0 0 8px; padding: 0; }
-  #roleList li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
-  #roleList li:hover { background: #35373c; }
-  #roleList li.on { background: #404249; }
-  #roleList .rname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: #80848e; }
-  #roleEditor { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-  .field { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .field input:not([type]) { flex: 1; min-width: 0; }
-  .perm { display: flex; gap: 8px; align-items: flex-start; }
-  .perm small { display: block; color: #949ba4; }
-  .btnrow { display: flex; gap: 8px; }
-  button.danger2 { background: #da373c; }
-  .muted { color: #949ba4; margin: 0; }
-  .mrow { padding: 8px 0; border-bottom: 1px solid #1e1f22; }
-  .chips { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 6px; }
-  .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; }
-  #form { display: flex; gap: 8px; padding: 12px 16px; }
-  #text { flex: 1; min-width: 0; }
-
-  @media (max-width: 800px) {
-    #main { flex-direction: column; }
-    #side { width: auto; flex: none; flex-direction: row; align-items: center; overflow: auto hidden;
-            border-right: 0; border-bottom: 1px solid #1e1f22; }
-    .shead span { display: none; }
-    .shead { padding: 4px 0 4px 8px; }
-    #chanList { display: flex; gap: 4px; padding: 4px 8px; }
-    #chanList li { flex: none; }
-    #sideFoot { margin: 0 8px 0 auto; padding: 0; flex: none; }
-    #sideFoot button { width: auto; }
-    .rgrid { grid-template-columns: 1fr; }
-    #voice, #voice.active { width: auto; flex: none; max-height: 50vh; border-right: 0;
-                            border-bottom: 1px solid #1e1f22; }
-    #voice.active + #chat { min-width: 0; }
-    #chat { min-height: 0; }
-  }
-</style>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/app.css">
 </head>
 <body>
 
+<!-- ============ accesso ============ -->
 <div id="auth" hidden>
   <div id="authCard">
+    <div class="logo-lg" data-logo></div>
     <h1>Hstle</h1>
-    <div class="tabs">
+    <p class="sub">Chat e voce per il tuo gruppo, su un server tuo.</p>
+    <div class="seg">
       <button type="button" id="tabLogin" class="on">Accedi</button>
-      <button type="button" id="tabRegister">Registrati</button>
+      <button type="button" id="tabRegister">Crea account</button>
     </div>
     <form id="authForm">
-      <input id="u" placeholder="Nome utente" autocomplete="username" required>
-      <input id="p" type="password" placeholder="Password (min. 8 caratteri)" autocomplete="current-password" required>
-      <input id="inv" placeholder="Codice invito (non serve al primo utente)" autocomplete="off" hidden>
-      <button id="authSubmit">Accedi</button>
-      <div id="authErr"></div>
+      <label class="fld"><span>Nome utente</span>
+        <input id="u" autocomplete="username" required></label>
+      <label class="fld"><span>Password</span>
+        <input id="p" type="password" autocomplete="current-password" minlength="8" required></label>
+      <label class="fld" id="invRow" hidden><span>Codice invito</span>
+        <input id="inv" autocomplete="off" placeholder="Non serve al primo account"></label>
+      <button class="btn" id="authSubmit">Accedi</button>
+      <div id="authErr" class="err" role="alert"></div>
     </form>
   </div>
 </div>
 
+<!-- ============ app ============ -->
 <div id="app" hidden>
-  <header>
-    <span>Hstle</span>
-    <span class="right">
-      <span id="status">connessione…</span>
-      <button type="button" class="ghost" id="inviteBtn" hidden>Crea invito</button>
-      <button type="button" class="ghost" id="logoutBtn">Esci</button>
-    </span>
-  </header>
-  <div id="main">
-    <aside id="side">
-      <div class="shead">
-        <span>Canali di testo</span>
-        <button type="button" class="icon" id="addChan" title="Nuovo canale" hidden>+</button>
+  <div id="scrim" hidden></div>
+
+  <aside id="side">
+    <header class="brand">
+      <span class="logo" data-logo></span>
+      <b>Hstle</b>
+      <span id="conn" class="conn" title="Connessione"></span>
+    </header>
+
+    <div id="sideScroll">
+      <section>
+        <div class="gh"><span>Canali di testo</span>
+          <button type="button" class="ib sm" id="addChan" title="Nuovo canale" aria-label="Nuovo canale di testo" hidden data-icon="plus"></button></div>
+        <ul id="chanList" class="nav"></ul>
+      </section>
+      <section>
+        <div class="gh"><span>Canali vocali</span>
+          <button type="button" class="ib sm" id="addVChan" title="Nuovo canale vocale" aria-label="Nuovo canale vocale" hidden data-icon="plus"></button></div>
+        <ul id="vchanList" class="nav"></ul>
+      </section>
+      <section>
+        <div class="gh"><span>Messaggi privati</span>
+          <button type="button" class="ib sm" id="newDm" title="Nuovo messaggio" aria-label="Nuovo messaggio privato" data-icon="plus"></button></div>
+        <ul id="dmList" class="nav"></ul>
+      </section>
+    </div>
+
+    <div id="vcard" hidden>
+      <div class="vc-info">
+        <span class="vc-live"></span>
+        <div><b id="vcName">Voce connessa</b><small id="vcSub"></small></div>
       </div>
-      <ul id="chanList"></ul>
-      <div id="sideFoot">
-        <button type="button" class="ghost" id="rolesBtn" hidden>Ruoli e membri</button>
+      <button type="button" class="ib" data-act="leave" title="Esci dal canale vocale" aria-label="Esci dal canale vocale" data-icon="logout"></button>
+    </div>
+
+    <div id="dock">
+      <button type="button" class="dock-me" id="dockMe" title="Il tuo profilo">
+        <span id="dockAv"></span>
+        <span class="dock-txt"><b id="dockName"></b><small id="dockSub"></small></span>
+      </button>
+      <button type="button" class="ib" data-act="mute" title="Microfono" aria-label="Microfono"></button>
+      <button type="button" class="ib" data-act="deaf" title="Cuffie" aria-label="Cuffie"></button>
+      <button type="button" class="ib" id="settingsBtn" title="Impostazioni" aria-label="Impostazioni" data-icon="settings"></button>
+    </div>
+  </aside>
+
+  <main id="main">
+    <header id="top">
+      <button type="button" class="ib mob" id="menuBtn" title="Menu" aria-label="Apri il menu" data-icon="menu"></button>
+      <div id="title"></div>
+      <div class="tools">
+        <button type="button" class="ib" id="inviteBtn" title="Crea un invito" aria-label="Crea un invito" hidden data-icon="userplus"></button>
+        <button type="button" class="ib" id="rolesBtn" title="Ruoli e membri" aria-label="Ruoli e membri" hidden data-icon="shield"></button>
+        <button type="button" class="ib" id="membersBtn" title="Mostra o nascondi i membri" aria-label="Elenco dei membri" data-icon="users"></button>
       </div>
-    </aside>
-    <section id="voice">
-      <div class="vhead"><span>Canali vocali</span><button type="button" class="icon" id="addVChan" title="Nuovo canale vocale" hidden>+</button></div>
-      <ul id="members"></ul>
-      <div id="vnote"></div>
-      <div id="vctl">
-        <div id="inCall" hidden>
-          <button type="button" id="muteBtn">Microfono acceso</button>
-          <button type="button" id="camBtn">Camera spenta</button>
-          <button type="button" id="scrBtn">Condividi schermo</button>
-          <button type="button" id="leaveBtn" class="danger">Esci</button>
-        </div>
-      </div>
+    </header>
+
+    <section id="stage" hidden>
       <div id="grid"></div>
+      <div id="vnote" role="status"></div>
+      <div id="vbar">
+        <button type="button" class="rb" data-act="mute" title="Microfono" aria-label="Microfono"></button>
+        <button type="button" class="rb" data-act="deaf" title="Cuffie" aria-label="Cuffie"></button>
+        <button type="button" class="rb" data-act="cam" title="Camera" aria-label="Camera"></button>
+        <button type="button" class="rb" data-act="screen" title="Condividi lo schermo" aria-label="Condividi lo schermo"></button>
+        <button type="button" class="rb" data-act="ns" title="Riduzione del rumore" aria-label="Riduzione del rumore"></button>
+        <button type="button" class="rb leave" data-act="leave" title="Esci dal canale vocale" aria-label="Esci dal canale vocale" data-icon="logout"></button>
+      </div>
     </section>
-    <section id="chat">
-      <div id="log"></div>
-      <form id="form">
-        <input id="text" placeholder="Scrivi un messaggio" autocomplete="off">
-        <button>Invia</button>
-      </form>
-    </section>
-  </div>
+
+    <div id="log" tabindex="-1"></div>
+
+    <form id="form">
+      <textarea id="text" rows="1" maxlength="2000" autocomplete="off" placeholder="Scrivi un messaggio"></textarea>
+      <button class="send" id="sendBtn" title="Invia" aria-label="Invia il messaggio" data-icon="send"></button>
+    </form>
+  </main>
+
+  <aside id="memberPane">
+    <div class="gh"><span>Membri</span></div>
+    <div id="memberList"></div>
+  </aside>
 </div>
 
-<div id="toast" hidden></div>
+<div id="toast" hidden role="status"></div>
+<div id="pop" hidden></div>
 
+<!-- ============ ruoli e membri ============ -->
 <dialog id="rolesDlg">
-  <div class="dhead">
-    <span>Ruoli e membri</span>
-    <button type="button" class="ghost" id="rolesClose">Chiudi</button>
-  </div>
+  <div class="dhead"><h2>Ruoli e membri</h2>
+    <button type="button" class="ib" id="rolesClose" title="Chiudi" aria-label="Chiudi" data-icon="x"></button></div>
   <div class="dbody">
-    <div class="tabs">
+    <div class="seg">
       <button type="button" id="rTabRoles" class="on">Ruoli</button>
       <button type="button" id="rTabMembers">Membri</button>
     </div>
     <div id="rolesPane" class="rgrid">
       <div>
         <ul id="roleList"></ul>
-        <button type="button" class="ghost" id="newRole">+ Nuovo ruolo</button>
+        <button type="button" class="btn ghost" id="newRole">Nuovo ruolo</button>
       </div>
       <div id="roleEditor"></div>
     </div>
@@ -260,1050 +142,63 @@
   </div>
 </dialog>
 
-<script>
-const $ = (id) => document.getElementById(id);
-const TOKEN_KEY = 'hstle-token';
-// Ordine fisso delle tre "corsie" di ogni connessione WebRTC (uguale per entrambi i lati)
-const ROLES = ['mic', 'cam', 'screen'];
-
-let token = localStorage.getItem(TOKEN_KEY);
-let ws, retry, mode = 'login', me = null;
-
-// chat: canali, messaggi, ruoli
-let channels = [];                       // [{id, name}]
-let current = Number(localStorage.getItem('hstle-channel')) || null;
-let roles = [];                          // dal più alto al più basso; 'everyone' (id 1) è l'ultimo
-let members = new Map();                 // id -> {id, username, is_admin, roles, perms}
-const store = new Map();                 // id canale -> Map(id messaggio -> messaggio)
-const loaded = new Set();                // canali di cui abbiamo già chiesto la cronologia
-const unread = new Set();                // canali con messaggi non letti
-const deletedIds = new Set();            // messaggi eliminati (evita che una cronologia in ritardo li rimetta)
-let editing = null;                      // {id, draft}: messaggio che sto modificando
-const dlg = $('rolesDlg');
-
-function show(view) {
-  $('auth').hidden = view !== 'auth';
-  $('app').hidden = view !== 'app';
-}
-
-async function api(path, body, authed) {
-  const headers = { 'Content-Type': 'application/json' };
-  if (authed && token) headers.Authorization = 'Bearer ' + token;
-  const r = await fetch(path, { method: 'POST', headers, body: body ? JSON.stringify(body) : undefined });
-  let data = {};
-  try { data = await r.json(); } catch {}
-  if (!r.ok) throw new Error(data.error || 'errore ' + r.status);
-  return data;
-}
-
-function sendWs(obj) {
-  if (ws && ws.readyState === WebSocket.OPEN) { ws.send(JSON.stringify(obj)); return true; }
-  return false;
-}
-
-/* ================= login / registrazione ================= */
-function setMode(m) {
-  mode = m;
-  $('tabLogin').classList.toggle('on', m === 'login');
-  $('tabRegister').classList.toggle('on', m === 'register');
-  $('inv').hidden = m !== 'register';
-  $('authSubmit').textContent = m === 'login' ? 'Accedi' : 'Crea account';
-  $('p').autocomplete = m === 'login' ? 'current-password' : 'new-password';
-  $('authErr').textContent = '';
-}
-$('tabLogin').onclick = () => setMode('login');
-$('tabRegister').onclick = () => setMode('register');
-
-$('authForm').onsubmit = async (e) => {
-  e.preventDefault();
-  $('authErr').textContent = '';
-  const body = { username: $('u').value, password: $('p').value };
-  if (mode === 'register') body.invite = $('inv').value;
-  try {
-    const d = await api('/api/' + mode, body);
-    token = d.token;
-    localStorage.setItem(TOKEN_KEY, token);
-    $('p').value = '';
-    start();
-  } catch (err) {
-    $('authErr').textContent = err.message;
-  }
-};
-
-/* ================= chat ================= */
-function setStatus(t) { $('status').textContent = t; }
-
-function handle(m) {
-  switch (m.t) {
-    case 'error':
-      endSession();
-      $('authErr').textContent = 'Sessione scaduta: accedi di nuovo.';
-      break;
-    case 'ready':
-      me = m.user;
-      if (Array.isArray(m.ice)) voice.ice = m.ice;
-      setStatus('connesso come ' + me.username);
-      resetChat();                       // nuova connessione: si riparte dallo stato del server
-      renderAll();
-      break;
-    case 'channels': onChannels(m.channels); break;
-    case 'directory': onDirectory(m); break;
-    case 'history':
-      m.messages.forEach(putMsg);
-      if (m.channel === current) renderLog(true);
-      break;
-    case 'message': {
-      const x = m.message;
-      putMsg(x);
-      if (x.channel === current) renderLog();
-      else if (me && x.user.id !== me.id) { unread.add(x.channel); renderChannels(); }
-      break;
-    }
-    case 'message_edited':
-      putMsg(m.message);
-      if (m.message.channel === current) renderLog();
-      break;
-    case 'message_deleted':
-      deletedIds.add(m.id);
-      msgsOf(m.channel).delete(m.id);
-      if (editing && editing.id === m.id) editing = null;
-      if (m.channel === current) renderLog();
-      break;
-    case 'notice':
-      toast(m.error);
-      renderRolesDialog();               // riporta le caselle allo stato reale se la modifica è stata rifiutata
-      break;
-    case 'voice_state': onVoiceState(m); break;
-    case 'voice_channels': voice.vchannels = m.channels; renderMembers(); break;
-    case 'voice_joined': onVoiceJoined(m); break;
-    case 'voice_error': onVoiceError(m); break;
-    case 'voice_kicked':
-      note(m.reason || 'Sei stato disconnesso dal canale vocale.');
-      leaveVoice(false);
-      break;
-    case 'signal': onSignal(m); break;
-  }
-}
-
-function connect() {
-  clearTimeout(retry);
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(`${proto}://${location.host}/ws`);
-  setStatus('connessione…');
-  voice.lastV = -1;
-  ws.onopen = () => ws.send(JSON.stringify({ t: 'auth', token }));
-  ws.onmessage = (e) => handle(JSON.parse(e.data));
-  ws.onclose = () => {
-    // Senza server la chiamata non è più gestita: la chiudiamo.
-    if (voice.active || voice.joining) leaveVoice(false);
-    voice.members.clear();
-    renderAll();
-    if (!token) return;
-    setStatus('riconnessione…');
-    retry = setTimeout(connect, 2000);
-  };
-}
-
-function start() { show('app'); connect(); $('text').focus(); }
-
-function endSession() {
-  leaveVoice(true);
-  token = null;
-  me = null;
-  if (dlg.open) dlg.close();
-  resetChat();
-  localStorage.removeItem(TOKEN_KEY);
-  clearTimeout(retry);
-  if (ws) ws.close();
-  show('auth');
-}
-
-$('logoutBtn').onclick = async () => {
-  try { await api('/api/logout', null, true); } catch {}
-  endSession();
-};
-
-$('inviteBtn').onclick = async () => {
-  try {
-    const d = await api('/api/invites', null, true);
-    prompt('Codice invito (copialo e mandalo alla persona):', d.code);
-  } catch (err) { alert(err.message); }
-};
-
-$('form').onsubmit = (e) => {
-  e.preventDefault();
-  const text = $('text').value.trim();
-  if (!text) return;
-  if (current === null || !can(P.SEND)) return;
-  if (sendWs({ t: 'send', channel: current, text })) $('text').value = '';
-};
-
-/* ================= canali, messaggi, ruoli =================
-   Il server è l'unica autorità: controlla i permessi a ogni azione. Qui li
-   leggiamo (dall'elenco `directory`) solo per mostrare o nascondere i pulsanti. */
-const CHAN_KEY = 'hstle-channel';
-// Stessi bit di src/perms.rs
-const P = { SEND: 1, VOICE: 2, MSGS: 4, CHANNELS: 8, ROLES: 16, INVITES: 32, ADMIN: 64 };
-const PERMS = [
-  [P.SEND, 'Scrivere messaggi', 'Scrivere e modificare i propri messaggi'],
-  [P.VOICE, 'Canale vocale', 'Entrare nel canale vocale'],
-  [P.MSGS, 'Gestire i messaggi', 'Eliminare i messaggi degli altri'],
-  [P.CHANNELS, 'Gestire i canali', 'Creare, rinominare ed eliminare i canali'],
-  [P.ROLES, 'Gestire i ruoli', 'Creare e assegnare ruoli, ma solo quelli più bassi del proprio'],
-  [P.INVITES, 'Creare inviti', 'Generare i codici di invito'],
-  [P.ADMIN, 'Amministratore', 'Ha tutti i permessi'],
-];
-
-function el(tag, props, ...kids) {
-  const e = document.createElement(tag);
-  Object.assign(e, props || {});
-  e.append(...kids);
-  return e;
-}
-
-let toastTimer;
-function toast(text) {
-  const t = $('toast');
-  t.textContent = text;
-  t.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, 4500);
-}
-
-function safeColor(c) { return /^#[0-9a-f]{6}$/i.test(c || '') ? c : ''; }
-
-/* ---------- permessi (solo per l'interfaccia) ---------- */
-function myPerms() {
-  const m = me && members.get(me.id);
-  if (m) return m.perms;
-  return me ? (me.is_admin ? 127 : 3) : 0;   // prima che arrivi l'elenco dei membri
-}
-function can(p) { return (myPerms() & p) === p; }
-
-function topPos(m) {                          // posizione del ruolo più alto di un membro
-  if (m.is_admin) return Infinity;
-  let top = 0;
-  for (const r of roles) if (m.roles.includes(r.id)) top = Math.max(top, r.position);
-  return top;
-}
-function outranks(pos) {
-  const m = me && members.get(me.id);
-  if (!m) return !!(me && me.is_admin);
-  return topPos(m) > pos;
-}
-
-function colorOf(uid) {                       // colore del ruolo più alto che ha un colore
-  const m = members.get(uid);
-  if (!m) return '';
-  for (const r of roles) if (r.color && m.roles.includes(r.id)) return safeColor(r.color);
-  return '';
-}
-
-/* ---------- messaggi ---------- */
-function msgsOf(ch) {
-  let s = store.get(ch);
-  if (!s) store.set(ch, (s = new Map()));
-  return s;
-}
-
-function putMsg(m) {
-  if (deletedIds.has(m.id)) return;
-  const s = msgsOf(m.channel);
-  const old = s.get(m.id);
-  if (!old || (m.edited || 0) >= (old.edited || 0)) s.set(m.id, m);   // non tornare a una versione più vecchia
-}
-
-function findMsg(id) {
-  for (const s of store.values()) if (s.has(id)) return s.get(id);
-  return null;
-}
-
-function msgRow(m) {
-  const row = el('div', { className: 'msg' });
-  const who = el('b', { textContent: m.user.username });   // textContent: niente HTML iniettato
-  const col = colorOf(m.user.id);
-  if (col) who.style.color = col;
-  row.append(
-    el('time', { textContent: new Date(m.ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }),
-    who,
-  );
-  if (editing && editing.id === m.id) { row.append(editorEl()); return row; }
-
-  row.append(el('span', { textContent: m.text }));
-  if (m.edited) {
-    row.append(el('small', { className: 'edited', textContent: '(modificato)', title: new Date(m.edited * 1000).toLocaleString() }));
-  }
-  const mine = me && m.user.id === me.id;
-  const canEdit = mine && can(P.SEND);
-  const canDel = mine || can(P.MSGS);
-  if (canEdit || canDel) {
-    const acts = el('span', { className: 'acts' });
-    if (canEdit) acts.append(el('button', { type: 'button', textContent: 'Modifica', onclick: () => startEdit(m) }));
-    if (canDel) acts.append(el('button', { type: 'button', className: 'del', textContent: 'Elimina', onclick: () => deleteMsg(m) }));
-    row.append(acts);
-  }
-  return row;
-}
-
-function editorEl() {
-  const input = el('input', { value: editing.draft, maxLength: 2000, autocomplete: 'off' });
-  input.oninput = () => { editing.draft = input.value; };
-  input.onkeydown = (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); saveEdit(); }
-    else if (e.key === 'Escape') cancelEdit();
-  };
-  return el('span', { className: 'editor' }, input,
-    el('button', { type: 'button', textContent: 'Salva', onclick: saveEdit }),
-    el('button', { type: 'button', className: 'ghost', textContent: 'Annulla', onclick: cancelEdit }));
-}
-
-function renderLog(toBottom, focusEditor) {
-  const log = $('log');
-  const stick = toBottom || log.scrollHeight - log.scrollTop - log.clientHeight < 80;
-  const hadFocus = log.contains(document.activeElement);
-  const list = current === null ? [] : [...msgsOf(current).values()].sort((a, b) => a.id - b.id).slice(-300);
-  log.replaceChildren(...list.map(msgRow));
-  if (stick) log.scrollTop = log.scrollHeight;
-  if (editing && (focusEditor || hadFocus)) {
-    const i = log.querySelector('.editor input');
-    if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
-  }
-}
-
-function startEdit(m) { editing = { id: m.id, draft: m.text }; renderLog(false, true); }
-function cancelEdit() { editing = null; renderLog(); }
-function saveEdit() {
-  if (!editing) return;
-  const text = editing.draft.trim();
-  if (!text) { toast('Il messaggio non può essere vuoto: per toglierlo, eliminalo.'); return; }
-  const m = findMsg(editing.id);
-  if (m && text !== m.text) sendWs({ t: 'edit', id: editing.id, text });
-  editing = null;
-  renderLog();
-}
-function deleteMsg(m) {
-  if (confirm('Eliminare questo messaggio?')) sendWs({ t: 'delete', id: m.id });
-}
-
-/* ---------- canali ---------- */
-function renderChannels() {
-  const ul = $('chanList');
-  ul.replaceChildren();
-  for (const ch of channels) {
-    const name = el('span', { className: 'name', textContent: '# ' + ch.name, tabIndex: 0, onclick: () => selectChannel(ch.id) });
-    name.onkeydown = (e) => { if (e.key === 'Enter') selectChannel(ch.id); };
-    const li = el('li', {}, name);
-    li.classList.toggle('on', ch.id === current);
-    li.classList.toggle('unread', unread.has(ch.id));
-    if (can(P.CHANNELS)) {
-      li.append(el('span', { className: 'tools' },
-        el('button', { type: 'button', className: 'icon', title: 'Rinomina', textContent: '\u270E', onclick: () => renameChannel(ch) }),
-        el('button', { type: 'button', className: 'icon', title: 'Elimina', textContent: '\u2715', onclick: () => deleteChannel(ch) })));
-    }
-    ul.append(li);
-  }
-  $('addChan').hidden = !can(P.CHANNELS);
-  $('rolesBtn').hidden = !can(P.ROLES);
-  $('inviteBtn').hidden = !can(P.INVITES);
-}
-
-function renderComposer() {
-  const ch = channels.find((c) => c.id === current);
-  const ok = can(P.SEND) && !!ch;
-  $('text').disabled = !ok;
-  $('form').querySelector('button').disabled = !ok;
-  $('text').placeholder = !can(P.SEND) ? 'Non hai il permesso di scrivere' : ch ? 'Scrivi in #' + ch.name : 'Scrivi un messaggio';
-}
-
-function selectChannel(id) {
-  current = id;
-  localStorage.setItem(CHAN_KEY, String(id));
-  unread.delete(id);
-  editing = null;
-  if (!loaded.has(id)) {
-    loaded.add(id);
-    sendWs({ t: 'load_history', channel: id });
-  }
-  renderChannels();
-  renderComposer();
-  renderLog(true);
-  if (window.matchMedia('(hover: hover)').matches) $('text').focus();
-}
-
-function onChannels(list) {
-  channels = list;
-  const ids = new Set(list.map((c) => c.id));
-  for (const id of [...store.keys()]) if (!ids.has(id)) store.delete(id);
-  for (const set of [loaded, unread]) for (const id of [...set]) if (!ids.has(id)) set.delete(id);
-  const target = ids.has(current) ? current : (list.length ? list[0].id : null);
-  if (target !== null && (target !== current || !loaded.has(target))) {
-    selectChannel(target);                 // primo elenco della connessione, o il canale aperto non esiste più
-  } else {
-    renderChannels();                      // rinomina / nuovo canale: la vista non si sposta
-    renderComposer();
-  }
-}
-
-$('addChan').onclick = () => {
-  const name = prompt('Nome del nuovo canale (lettere, numeri, - e _):');
-  if (name && name.trim()) sendWs({ t: 'channel_create', name });
-};
-function renameChannel(ch) {
-  const name = prompt('Nuovo nome del canale:', ch.name);
-  if (name && name.trim() && name.trim() !== ch.name) sendWs({ t: 'channel_rename', id: ch.id, name });
-}
-function deleteChannel(ch) {
-  if (confirm('Eliminare #' + ch.name + ' con tutti i suoi messaggi? Non si può annullare.')) {
-    sendWs({ t: 'channel_delete', id: ch.id });
-  }
-}
-
-/* ---------- elenco di ruoli e membri ---------- */
-function onDirectory(d) {
-  roles = d.roles;
-  members = new Map(d.members.map((x) => [x.id, x]));
-  if (me && members.has(me.id)) me.is_admin = members.get(me.id).is_admin;
-  renderChannels();
-  renderComposer();
-  renderLog();                              // colori dei nomi e pulsanti Modifica/Elimina
-  renderMembers();                          // entrare nei canali vocali dipende dai permessi
-  renderControls();
-  renderRolesDialog();
-}
-
-function resetChat() {
-  channels = [];
-  roles = [];
-  members = new Map();
-  store.clear(); loaded.clear(); unread.clear(); deletedIds.clear();
-  editing = null;
-  renderChannels();
-  renderLog(true);
-}
-
-/* ---------- finestra "Ruoli e membri" ---------- */
-let rtab = 'roles';
-let selRole = null;        // id del ruolo aperto, oppure 'new'
-let editorKey = null;      // per non ricostruire il modulo (e perdere le modifiche) a ogni aggiornamento
-
-$('rolesBtn').onclick = () => {
-  rtab = 'roles';
-  selRole = null;
-  editorKey = null;
-  dlg.showModal();
-  renderRolesDialog();
-};
-$('rolesClose').onclick = () => dlg.close();
-dlg.onclick = (e) => { if (e.target === dlg) dlg.close(); };   // clic sullo sfondo
-$('rTabRoles').onclick = () => { rtab = 'roles'; renderRolesDialog(); };
-$('rTabMembers').onclick = () => { rtab = 'members'; renderRolesDialog(); };
-$('newRole').onclick = () => { selRole = 'new'; renderRolesDialog(); };
-
-function renderRolesDialog() {
-  if (!dlg.open) return;
-  if (!can(P.ROLES)) { dlg.close(); return; }
-  if (selRole !== null && selRole !== 'new' && !roles.some((r) => r.id === selRole)) {
-    selRole = null;
-    editorKey = null;
-  }
-  $('rTabRoles').classList.toggle('on', rtab === 'roles');
-  $('rTabMembers').classList.toggle('on', rtab === 'members');
-  $('rolesPane').hidden = rtab !== 'roles';
-  $('membersPane').hidden = rtab !== 'members';
-  renderRoleList();
-  renderRoleEditor();
-  renderUserRoles();
-}
-
-function canManageRole(r) { return can(P.ROLES) && outranks(r.position); }
-
-function renderRoleList() {
-  const ul = $('roleList');
-  ul.replaceChildren();
-  for (const r of roles) {
-    const dot = el('span', { className: 'dot' });
-    if (safeColor(r.color)) dot.style.background = r.color;
-    const li = el('li', { onclick: () => { selRole = r.id; renderRolesDialog(); } },
-      dot, el('span', { className: 'rname', textContent: r.id === 1 ? '@everyone' : r.name }));
-    li.classList.toggle('on', r.id === selRole);
-    if (r.id !== 1 && canManageRole(r)) {
-      const move = (up) => (e) => { e.stopPropagation(); sendWs({ t: 'role_move', id: r.id, up }); };
-      li.append(
-        el('button', { type: 'button', className: 'icon', title: 'Sposta in alto', textContent: '\u25B2', onclick: move(true) }),
-        el('button', { type: 'button', className: 'icon', title: 'Sposta in basso', textContent: '\u25BC', onclick: move(false) }));
-    }
-    ul.append(li);
-  }
-  $('newRole').hidden = !can(P.ROLES);
-}
-
-function renderRoleEditor() {
-  const key = String(selRole);
-  if (editorKey === key) return;
-  editorKey = key;
-  const box = $('roleEditor');
-  box.replaceChildren();
-  const isNew = selRole === 'new';
-  const r = isNew
-    ? { id: 0, name: '', color: '', permissions: P.SEND | P.VOICE, position: 0 }
-    : roles.find((x) => x.id === selRole);
-  if (!r) { box.append(el('p', { className: 'muted', textContent: 'Scegli un ruolo per vederlo o modificarlo.' })); return; }
-
-  const editable = isNew ? can(P.ROLES) : canManageRole(r);
-  const fixed = r.id === 1;                  // di everyone si cambiano solo i permessi
-  const name = el('input', { value: fixed ? '@everyone' : r.name, placeholder: 'Nome del ruolo', maxLength: 32, disabled: !editable || fixed });
-  const none = el('input', { type: 'checkbox', checked: !safeColor(r.color), disabled: !editable });
-  const color = el('input', { type: 'color', value: safeColor(r.color) || '#99aab5', disabled: !editable });
-  if (!fixed) {
-    box.append(
-      el('div', { className: 'field' }, name),
-      el('div', { className: 'field' }, color, el('label', { className: 'chip' }, none, 'Nessun colore')));
-  } else {
-    box.append(el('p', { className: 'muted', textContent: 'Vale per tutti i membri, anche senza altri ruoli.' }));
-  }
-  for (const [bit, label, hint] of PERMS) {
-    const cb = el('input', { type: 'checkbox', checked: (r.permissions & bit) !== 0, disabled: !editable || (myPerms() & bit) === 0 });
-    cb.dataset.bit = String(bit);
-    box.append(el('label', { className: 'perm' }, cb,
-      el('span', {}, label, el('small', { textContent: hint }))));
-  }
-  const row = el('div', { className: 'btnrow' });
-  if (editable) {
-    row.append(el('button', {
-      type: 'button',
-      textContent: isNew ? 'Crea ruolo' : 'Salva',
-      onclick: () => {
-        let bits = 0;
-        for (const cb of box.querySelectorAll('input[data-bit]')) if (cb.checked) bits |= Number(cb.dataset.bit);
-        const body = { name: name.value, color: none.checked ? '' : color.value, permissions: bits };
-        if (isNew) {
-          sendWs({ t: 'role_create', ...body });
-          selRole = null;
-          editorKey = null;
-          renderRolesDialog();
-        } else {
-          sendWs({ t: 'role_edit', id: r.id, ...body });
-          editorKey = null;                  // si ricostruisce con i valori salvati all'arrivo dell'elenco
-        }
-      },
-    }));
-    if (!isNew && !fixed) {
-      row.append(el('button', {
-        type: 'button', className: 'danger2', textContent: 'Elimina',
-        onclick: () => {
-          if (!confirm('Eliminare il ruolo "' + r.name + '"? Lo perderanno tutti i membri che lo hanno.')) return;
-          sendWs({ t: 'role_delete', id: r.id });
-          selRole = null;
-          editorKey = null;
-        },
-      }));
-    }
-  } else {
-    row.append(el('p', { className: 'muted', textContent: 'Non puoi modificare questo ruolo: è allo stesso livello del tuo o più in alto.' }));
-  }
-  box.append(row);
-}
-
-function renderUserRoles() {
-  const box = $('membersList');
-  box.replaceChildren();
-  const assignable = roles.filter((r) => r.id !== 1);
-  for (const mem of members.values()) {
-    const title = mem.username + (me && mem.id === me.id ? ' (tu)' : '') + (mem.is_admin ? ' \u2013 proprietario' : '');
-    const chips = el('div', { className: 'chips' });
-    const mayEdit = can(P.ROLES) && !mem.is_admin && ((me && mem.id === me.id) || outranks(topPos(mem)));
-    for (const r of assignable) {
-      const cb = el('input', { type: 'checkbox', checked: mem.roles.includes(r.id), disabled: !mayEdit || !outranks(r.position) });
-      cb.onchange = () => {
-        const next = new Set(mem.roles);
-        if (cb.checked) next.add(r.id); else next.delete(r.id);
-        sendWs({ t: 'member_roles', user: mem.id, roles: [...next] });
-      };
-      const dot = el('span', { className: 'dot' });
-      if (safeColor(r.color)) dot.style.background = r.color;
-      chips.append(el('label', { className: 'chip' }, cb, dot, r.name));
-    }
-    if (!assignable.length) chips.append(el('span', { className: 'muted', textContent: 'Nessun ruolo creato.' }));
-    box.append(el('div', { className: 'mrow' }, el('b', { textContent: title }), chips));
-  }
-}
-
-/* ================= voce e video (WebRTC mesh) =================
-   Ogni partecipante si collega direttamente a tutti gli altri. Il server
-   inoltra solo i messaggi di segnalazione (SDP e candidati ICE) e tiene
-   l'elenco di chi è nel canale; l'audio e il video non passano da lui.
-   Chi entra per ultimo manda l'offerta a chi c'era già.
-   Ogni connessione ha 3 "corsie" fisse: microfono, camera, schermo. Accendere
-   o spegnere camera e schermo cambia solo la traccia: non serve rinegoziare. */
-const voice = {
-  active: false, joining: false,
-  channel: null,          // canale vocale in cui sono
-  vchannels: [],          // [{id, name}]
-  joinV: 0, lastV: -1,
-  members: new Map(),     // id -> {id, username, muted, cam, screen} (stato dal server)
-  peers: new Map(),       // id -> connessione verso quella persona
-  mic: null, cam: null, scr: null,              // tracce locali
-  camStream: null, scrStream: null,
-  ice: [{ urls: ['stun:stun.l.google.com:19302'] }],
-};
-const tiles = new Map();      // chiave 'cam:ID' / 'scr:ID' -> elemento della griglia
-const watchers = new Map();   // chiave 'me' / 'pID' -> analizzatore del volume
-let actx = null;
-let signalChain = Promise.resolve();
-
-function note(text) { $('vnote').textContent = text || ''; }
-
-function ensureAudioCtx() {
-  try {
-    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
-    if (actx.state === 'suspended') actx.resume();
-  } catch {}
-}
-
-/* ---------- interfaccia ---------- */
-function renderMembers() {
-  const ul = $('members');
-  ul.replaceChildren();
-  $('addVChan').hidden = !can(P.CHANNELS);
-  if (!voice.vchannels.length) ul.append(el('li', { className: 'empty', textContent: 'Nessun canale vocale' }));
-  for (const ch of voice.vchannels) {
-    const name = el('span', {
-      className: 'name', tabIndex: 0, textContent: '\uD83D\uDD0A ' + ch.name,
-      title: can(P.VOICE) ? 'Entra nel canale' : 'Non hai il permesso di entrare nei canali vocali',
-    });
-    const enter = () => {
-      if (!can(P.VOICE)) { toast('Non hai il permesso di entrare nei canali vocali.'); return; }
-      joinVoice(ch.id);
-    };
-    name.onclick = enter;
-    name.onkeydown = (e) => { if (e.key === 'Enter') enter(); };
-    const head = el('div', { className: 'head' }, name);
-    if (can(P.CHANNELS)) {
-      head.append(el('span', { className: 'tools' },
-        el('button', { type: 'button', className: 'icon', title: 'Rinomina', textContent: '\u270E', onclick: () => renameVChannel(ch) }),
-        el('button', { type: 'button', className: 'icon', title: 'Elimina', textContent: '\u2715', onclick: () => deleteVChannel(ch) })));
-    }
-    const mem = el('ul', { className: 'vmem' });
-    for (const m of voice.members.values()) {
-      if (m.channel !== ch.id) continue;
-      const li = el('li', {},
-        el('span', { textContent: m.username + (me && m.id === me.id ? ' (tu)' : '') }),
-        el('small', { textContent: [m.muted ? 'muto' : '', m.cam ? 'camera' : '', m.screen ? 'schermo' : ''].filter(Boolean).join(' \u00B7 ') }));
-      li.dataset.id = m.id;
-      if (isSpeaking(m.id)) li.classList.add('speaking');
-      mem.append(li);
-    }
-    const li = el('li', { className: 'vch' }, head, mem);
-    li.classList.toggle('on', voice.active && voice.channel === ch.id);
-    ul.append(li);
-  }
-}
-
-function renameVChannel(ch) {
-  const name = prompt('Nuovo nome del canale vocale:', ch.name);
-  if (name && name.trim() && name.trim() !== ch.name) sendWs({ t: 'voice_channel_rename', id: ch.id, name });
-}
-function deleteVChannel(ch) {
-  if (confirm('Eliminare il canale vocale ' + ch.name + '? Chi è dentro verrà disconnesso.')) {
-    sendWs({ t: 'voice_channel_delete', id: ch.id });
-  }
-}
-
-function renderControls() {
-  const v = voice;
-  $('voice').classList.toggle('active', v.active);
-  $('inCall').hidden = !v.active;
-  const muted = !v.mic || !v.mic.enabled;
-  $('muteBtn').textContent = muted ? 'Microfono spento' : 'Microfono acceso';
-  $('muteBtn').classList.toggle('off', muted);
-  $('muteBtn').disabled = !v.mic;
-  $('camBtn').textContent = v.cam ? 'Camera accesa' : 'Camera spenta';
-  $('camBtn').classList.toggle('on', !!v.cam);
-  $('scrBtn').textContent = v.scr ? 'Smetti di condividere' : 'Condividi schermo';
-  $('scrBtn').classList.toggle('on', !!v.scr);
-  $('scrBtn').hidden = !(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
-}
-
-function makeTile() {
-  const t = document.createElement('div');
-  t.className = 'tile';
-  t.v = document.createElement('video');
-  t.v.autoplay = true;
-  t.v.playsInline = true;
-  t.v.muted = true;            // l'audio degli altri passa da elementi <audio> separati
-  t.ph = document.createElement('div');
-  t.ph.className = 'ph';
-  t.label = document.createElement('span');
-  t.label.className = 'label';
-  t.append(t.v, t.ph, t.label);
-  return t;
-}
-
-function renderTiles() {
-  const wanted = new Map();
-  if (voice.active && me) {
-    wanted.set('cam:' + me.id, { id: me.id, kind: 'cam', stream: voice.camStream, label: me.username + ' (tu)', video: !!voice.cam });
-    if (voice.scr) wanted.set('scr:' + me.id, { id: me.id, kind: 'screen', stream: voice.scrStream, label: 'Il tuo schermo', video: true });
-    for (const [id, peer] of voice.peers) {
-      const m = voice.members.get(id);
-      if (!m) continue;
-      wanted.set('cam:' + id, { id, kind: 'cam', stream: peer.streams.cam, label: m.username, video: m.cam });
-      if (m.screen) wanted.set('scr:' + id, { id, kind: 'screen', stream: peer.streams.screen, label: 'Schermo di ' + m.username, video: true });
-    }
-  }
-  for (const [key, el] of tiles) {
-    if (!wanted.has(key)) { el.v.srcObject = null; el.remove(); tiles.delete(key); }
-  }
-  for (const [key, w] of wanted) {
-    let t = tiles.get(key);
-    if (!t) { t = makeTile(); tiles.set(key, t); $('grid').append(t); }
-    if (t.v.srcObject !== w.stream) t.v.srcObject = w.stream || null;
-    t.classList.toggle('hasvideo', !!(w.video && w.stream));
-    t.classList.toggle('screen', w.kind === 'screen');
-    t.classList.toggle('speaking', w.kind === 'cam' && isSpeaking(w.id));
-    t.label.textContent = w.label;
-    t.ph.textContent = (w.label[0] || '?').toUpperCase();
-    if (t.hasvideo !== t.classList.contains('hasvideo')) {
-      t.hasvideo = t.classList.contains('hasvideo');
-      if (t.hasvideo) t.v.play().catch(() => {});
-    }
-  }
-}
-
-function renderAll() { renderMembers(); renderControls(); renderTiles(); }
-
-/* ---------- chi sta parlando ---------- */
-function isSpeaking(id) {
-  const w = watchers.get(me && id === me.id ? 'me' : 'p' + id);
-  return !!(w && w.speaking);
-}
-
-function applySpeaking() {
-  for (const [key, t] of tiles) {
-    if (key.startsWith('cam:')) t.classList.toggle('speaking', isSpeaking(Number(key.slice(4))));
-  }
-  for (const li of document.querySelectorAll('#members li[data-id]')) {
-    li.classList.toggle('speaking', isSpeaking(Number(li.dataset.id)));
-  }
-}
-
-function watchSpeaking(key, stream) {
-  try {
-    ensureAudioCtx();
-    const an = actx.createAnalyser();
-    an.fftSize = 512;
-    actx.createMediaStreamSource(stream).connect(an);   // non collegato alle casse: serve solo a misurare
-    watchers.set(key, { an, buf: new Uint8Array(an.fftSize), last: 0, speaking: false });
-  } catch {}
-}
-
-setInterval(() => {
-  if (!watchers.size) return;
-  const now = performance.now();
-  let changed = false;
-  for (const [key, w] of watchers) {
-    w.an.getByteTimeDomainData(w.buf);
-    let sum = 0;
-    for (const b of w.buf) { const x = (b - 128) / 128; sum += x * x; }
-    if (Math.sqrt(sum / w.buf.length) > 0.03) w.last = now;
-    const silenced = key === 'me' && (!voice.mic || !voice.mic.enabled);
-    const speaking = !silenced && now - w.last < 300;
-    if (speaking !== w.speaking) { w.speaking = speaking; changed = true; }
-  }
-  if (changed) applySpeaking();
-}, 100);
-
-/* ---------- messaggi dal server ---------- */
-function onVoiceState(m) {
-  if (m.v <= voice.lastV) return;       // stato vecchio arrivato in ritardo
-  voice.lastV = m.v;
-  voice.members = new Map(m.members.map((x) => [x.id, x]));
-  // Se il server non mi ha più nel canale (riavvio, uscita da altra scheda), chiudo la chiamata.
-  if (voice.active && m.v >= voice.joinV && me && !voice.members.has(me.id)) {
-    leaveVoice(false);
-    return;
-  }
-  for (const id of [...voice.peers.keys()]) {
-    const pm = voice.members.get(id);
-    if (!pm || pm.channel !== voice.channel) closePeer(id);
-  }
-  renderAll();
-}
-
-function onVoiceJoined(m) {
-  voice.joining = false;
-  voice.active = true;
-  voice.joinV = m.v;
-  voice.channel = m.channel;
-  if (voice.mic) watchSpeaking('me', new MediaStream([voice.mic]));
-  for (const p of m.peers) createPeer(p.id, true);
-  sendMeta();
-  renderAll();
-}
-
-function onVoiceError(m) {
-  voice.joining = false;
-  [voice.mic, voice.cam, voice.scr].forEach((t) => t && t.stop());
-  voice.mic = voice.cam = voice.scr = voice.camStream = voice.scrStream = null;
-  note(m.error || 'Impossibile entrare nel canale vocale.');
-  renderAll();
-}
-
-function sendMeta() {
-  sendWs({
-    t: 'voice_meta',
-    muted: !voice.mic || !voice.mic.enabled,
-    cam: !!voice.cam,
-    screen: !!voice.scr,
-  });
-}
-
-/* ---------- entrare e uscire ---------- */
-async function joinVoice(channel) {
-  if (voice.joining || !me || !can(P.VOICE)) return;
-  if (voice.active) {
-    if (voice.channel === channel) return;
-    leaveVoice(true);                 // cambio canale: esco dal vecchio ed entro nel nuovo
-  }
-  if (!navigator.mediaDevices || !window.RTCPeerConnection) {
-    note('Il browser non permette la voce qui: serve una connessione HTTPS (o localhost).');
-    return;
-  }
-  note('');
-  voice.joining = true;
-  ensureAudioCtx();               // va creato subito, mentre il click è "fresco"
-  renderControls();
-  try {
-    const s = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-    });
-    voice.mic = s.getAudioTracks()[0];
-  } catch {
-    voice.mic = null;
-    note('Microfono non disponibile: entri solo in ascolto.');
-  }
-  if (!sendWs({ t: 'voice_join', channel })) {
-    voice.joining = false;
-    if (voice.mic) voice.mic.stop();
-    voice.mic = null;
-    note('Non sei connesso al server.');
-    renderAll();
-  }
-}
-
-function leaveVoice(notify = true) {
-  if (notify && (voice.active || voice.joining)) sendWs({ t: 'voice_leave' });
-  for (const id of [...voice.peers.keys()]) closePeer(id);
-  [voice.mic, voice.cam, voice.scr].forEach((t) => t && t.stop());
-  voice.mic = voice.cam = voice.scr = voice.camStream = voice.scrStream = null;
-  watchers.clear();
-  voice.active = voice.joining = false;
-  voice.channel = null;
-  renderAll();
-}
-
-/* ---------- microfono, camera, schermo ---------- */
-function afterLocalChange() {
-  for (const p of voice.peers.values()) attachLocalTracks(p);
-  sendMeta();
-  renderAll();
-}
-
-function toggleMute() {
-  if (!voice.active || !voice.mic) return;
-  voice.mic.enabled = !voice.mic.enabled;
-  sendMeta();
-  renderAll();
-}
-
-async function toggleCam() {
-  if (!voice.active) return;
-  if (voice.cam) {
-    voice.cam.stop();
-    voice.cam = voice.camStream = null;
-  } else {
-    try {
-      const s = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 24 } },
-      });
-      const t = s.getVideoTracks()[0];
-      t.onended = () => { if (voice.cam === t) toggleCam(); };   // camera scollegata
-      voice.cam = t;
-      voice.camStream = new MediaStream([t]);
-    } catch {
-      note('Impossibile accedere alla camera.');
-      return;
-    }
-  }
-  afterLocalChange();
-}
-
-async function toggleScreen() {
-  if (!voice.active) return;
-  if (voice.scr) {
-    voice.scr.stop();
-    voice.scr = voice.scrStream = null;
-  } else {
-    try {
-      const s = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 15 } }, audio: false });
-      const t = s.getVideoTracks()[0];
-      t.contentHint = 'detail';                                   // meglio la nitidezza dei movimenti
-      t.onended = () => { if (voice.scr === t) toggleScreen(); }; // "Interrompi condivisione" del browser
-      voice.scr = t;
-      voice.scrStream = new MediaStream([t]);
-    } catch {
-      return;                                                     // annullato dall'utente
-    }
-  }
-  afterLocalChange();
-}
-
-$('addVChan').onclick = () => {
-  const name = prompt('Nome del nuovo canale vocale (lettere, numeri, - e _):');
-  if (name && name.trim()) sendWs({ t: 'voice_channel_create', name });
-};
-$('leaveBtn').onclick = () => leaveVoice(true);
-$('muteBtn').onclick = toggleMute;
-$('camBtn').onclick = toggleCam;
-$('scrBtn').onclick = toggleScreen;
-
-/* ---------- connessioni WebRTC verso gli altri ---------- */
-function sdpOf(d) { return { type: d.type, sdp: d.sdp }; }
-function sendSignal(to, data) { sendWs({ t: 'signal', to, data }); }
-
-function attachLocalTracks(peer) {
-  const want = [voice.mic, voice.cam, voice.scr];
-  peer.pc.getTransceivers().slice(0, 3).forEach((tr, i) => {
-    const track = want[i] || null;
-    if (tr.sender.track === track) return;
-    tr.sender.replaceTrack(track).then(() => { if (track) limitBitrate(peer, i); }).catch(() => {});
-  });
-}
-
-// Tetti di banda per non saturare l'upload: in mesh ogni flusso viene inviato a tutti.
-const MAX_BITRATE = [64000, 700000, 2500000];
-async function limitBitrate(peer, i) {
-  try {
-    const sender = peer.pc.getTransceivers()[i].sender;
-    const p = sender.getParameters();
-    if (!p.encodings || !p.encodings.length) return;
-    p.encodings[0].maxBitrate = MAX_BITRATE[i];
-    await sender.setParameters(p);
-  } catch {}
-}
-
-function createPeer(id, offerer) {
-  const pc = new RTCPeerConnection({ iceServers: voice.ice });
-  const peer = {
-    id, pc, offerer,
-    session: offerer ? Math.random().toString(36).slice(2) : null,
-    pendingIce: [],
-    streams: { mic: new MediaStream(), cam: new MediaStream(), screen: new MediaStream() },
-    audio: null,
-  };
-  voice.peers.set(id, peer);
-
-  if (offerer) {
-    pc.addTransceiver('audio', { direction: 'sendrecv' });   // corsia 0: microfono
-    pc.addTransceiver('video', { direction: 'sendrecv' });   // corsia 1: camera
-    pc.addTransceiver('video', { direction: 'sendrecv' });   // corsia 2: schermo
-    attachLocalTracks(peer);
-  }
-
-  pc.onicecandidate = (e) => {
-    if (e.candidate) sendSignal(id, { candidate: e.candidate.toJSON() });
-  };
-  pc.ontrack = (e) => {
-    const role = ROLES[pc.getTransceivers().indexOf(e.transceiver)];
-    if (!role) return;
-    peer.streams[role].addTrack(e.track);
-    if (role === 'mic') startRemoteAudio(peer);
-    renderTiles();
-  };
-  pc.onnegotiationneeded = async () => {
-    if (!peer.offerer) return;
-    try { await makeOffer(peer); } catch (err) { console.warn('offerta', err); }
-  };
-  pc.onconnectionstatechange = () => {
-    if (pc.connectionState === 'connected') ROLES.forEach((_, i) => limitBitrate(peer, i));
-    if (pc.connectionState === 'failed' && peer.offerer) pc.restartIce();
-  };
-  return peer;
-}
-
-function startRemoteAudio(peer) {
-  if (peer.audio) return;
-  const a = new Audio();
-  a.autoplay = true;
-  a.srcObject = peer.streams.mic;
-  a.play().catch(() => {});
-  peer.audio = a;
-  watchSpeaking('p' + peer.id, peer.streams.mic);
-}
-
-function closePeer(id) {
-  const peer = voice.peers.get(id);
-  if (!peer) return;
-  const pc = peer.pc;
-  pc.onicecandidate = pc.ontrack = pc.onnegotiationneeded = pc.onconnectionstatechange = null;
-  pc.close();
-  if (peer.audio) peer.audio.srcObject = null;
-  watchers.delete('p' + id);
-  voice.peers.delete(id);
-  renderTiles();
-}
-
-async function makeOffer(peer) {
-  const pc = peer.pc;
-  if (pc.signalingState !== 'stable') return;
-  await pc.setLocalDescription(await pc.createOffer());
-  sendSignal(peer.id, { sdp: sdpOf(pc.localDescription), session: peer.session });
-}
-
-async function flushIce(peer) {
-  for (const c of peer.pendingIce.splice(0)) {
-    try { await peer.pc.addIceCandidate(c); } catch {}
-  }
-}
-
-// I messaggi vengono elaborati uno alla volta, nell'ordine in cui arrivano.
-function onSignal(m) {
-  signalChain = signalChain.then(() => handleSignal(m.from, m.data)).catch((e) => console.warn('segnale', e));
-}
-
-async function handleSignal(from, data) {
-  if (!voice.active) return;
-  let peer = voice.peers.get(from);
-
-  if (data.sdp && data.sdp.type === 'offer') {
-    // Una sessione diversa dalla nostra conoscenza = la persona si è ricollegata da zero.
-    if (peer && peer.session !== data.session) { closePeer(from); peer = null; }
-    if (!peer) { peer = createPeer(from, false); peer.session = data.session; }
-    const pc = peer.pc;
-    await pc.setRemoteDescription(data.sdp);
-    pc.getTransceivers().slice(0, 3).forEach((t) => { t.direction = 'sendrecv'; });
-    attachLocalTracks(peer);
-    await pc.setLocalDescription(await pc.createAnswer());
-    sendSignal(from, { sdp: sdpOf(pc.localDescription), session: peer.session });
-    await flushIce(peer);
-  } else if (data.sdp && data.sdp.type === 'answer') {
-    if (!peer || data.session !== peer.session) return;
-    await peer.pc.setRemoteDescription(data.sdp);
-    await flushIce(peer);
-  } else if (data.candidate && peer) {
-    if (peer.pc.remoteDescription) {
-      try { await peer.pc.addIceCandidate(data.candidate); } catch {}
-    } else {
-      peer.pendingIce.push(data.candidate);
-    }
-  }
-}
-
-if (!navigator.mediaDevices) {
-  note('Per usare microfono e camera serve HTTPS (o localhost).');
-}
-renderAll();
-token ? start() : show('auth');
-</script>
+<!-- ============ impostazioni ============ -->
+<dialog id="settingsDlg">
+  <div class="dhead"><h2>Impostazioni</h2>
+    <button type="button" class="ib" id="setClose" title="Chiudi" aria-label="Chiudi" data-icon="x"></button></div>
+  <div class="dbody">
+    <div class="seg">
+      <button type="button" id="sTabProfile" class="on">Profilo</button>
+      <button type="button" id="sTabAudio">Audio e video</button>
+      <button type="button" id="sTabAccount">Account</button>
+    </div>
+
+    <div id="sPaneProfile" class="pgrid">
+      <form id="pfForm" class="stack">
+        <label class="fld"><span>Nome visualizzato</span>
+          <input id="pfName" maxlength="32" autocomplete="off" placeholder="Come vuoi essere chiamato"></label>
+        <label class="fld"><span>Presentazione <em id="pfBioCount"></em></span>
+          <textarea id="pfBio" rows="3" maxlength="190" placeholder="Due righe su di te"></textarea></label>
+        <div class="fld"><span>Colore del profilo</span>
+          <div class="swatches" id="pfSwatches"></div></div>
+        <div class="fld"><span>Immagine del profilo</span>
+          <div class="row">
+            <button type="button" class="btn ghost" id="pfUpload"><i data-icon="upload"></i>Carica un'immagine</button>
+            <button type="button" class="btn ghost" id="pfRemove">Rimuovi</button>
+            <input type="file" id="pfFile" accept="image/*" hidden>
+          </div></div>
+        <div class="row"><button class="btn" id="pfSave">Salva il profilo</button></div>
+        <div id="pfErr" class="err" role="alert"></div>
+      </form>
+      <div id="pfPreview" class="preview"></div>
+    </div>
+
+    <div id="sPaneAudio" class="stack" hidden>
+      <label class="opt">
+        <span><b>Riduzione del rumore</b>
+          <small>Toglie dal microfono i rumori di fondo, come tastiera e ventola. Vale subito, anche durante una chiamata.</small></span>
+        <span class="switch"><input type="checkbox" id="nsToggle"><i></i></span>
+      </label>
+      <p class="muted" id="nsNote"></p>
+    </div>
+
+    <div id="sPaneAccount" class="stack" hidden>
+      <p>Hai effettuato l'accesso come <b id="acctName"></b>.</p>
+      <div class="row"><button type="button" class="btn danger" id="logoutBtn">Esci dall'account</button></div>
+    </div>
+  </div>
+</dialog>
+
+<!-- ============ nuovo messaggio privato ============ -->
+<dialog id="dmDlg" class="small">
+  <div class="dhead"><h2>Nuovo messaggio</h2>
+    <button type="button" class="ib" id="dmClose" title="Chiudi" aria-label="Chiudi" data-icon="x"></button></div>
+  <div class="dbody">
+    <input id="dmSearch" class="search" placeholder="Cerca una persona" autocomplete="off">
+    <ul id="dmPeople" class="people"></ul>
+  </div>
+</dialog>
+
+<script src="/app.js"></script>
 </body>
 </html>

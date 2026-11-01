@@ -76,7 +76,7 @@ pub async fn user_from_token(db: &Db, token: &str) -> Option<User> {
     db.user_by_token(hash_token(token)).await.ok().flatten()
 }
 
-async fn require_user(state: &AppState, headers: &HeaderMap) -> Result<User, ApiError> {
+pub async fn require_user(state: &AppState, headers: &HeaderMap) -> Result<User, ApiError> {
     let unauth = || ApiError(StatusCode::UNAUTHORIZED, "non autenticato");
     let token = bearer(headers).ok_or_else(unauth)?;
     user_from_token(&state.db, token).await.ok_or_else(unauth)

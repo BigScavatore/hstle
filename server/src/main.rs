@@ -1,18 +1,24 @@
 mod auth;
 mod db;
 mod perms;
+mod profile;
 mod voice;
 mod ws;
 
 use axum::{
-    http::StatusCode,
+    http::{header, StatusCode},
     response::{Html, IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::sync::{atomic::AtomicU64, Arc, Mutex};
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, mpsc};
+
+/// Connessioni WebSocket aperte: id connessione -> (id utente, canale privato verso di essa).
+/// Serve per i messaggi privati e per sapere chi è online.
+pub type Conns = Arc<Mutex<HashMap<u64, (i64, mpsc::Sender<String>)>>>;
 
 /// Stato condiviso tra tutte le richieste.
 #[derive(Clone)]
@@ -26,6 +32,8 @@ pub struct AppState {
     pub next_conn: Arc<AtomicU64>,
     /// Server STUN/TURN che i client usano per la voce.
     pub ice: Arc<Value>,
+    /// Chi è connesso adesso.
+    pub conns: Conns,
 }
 
 /// Errore restituito come JSON `{"error": "..."}` con il codice HTTP indicato.
@@ -72,10 +80,17 @@ async fn main() {
         voice: Arc::new(Mutex::new(voice::Voice::default())),
         next_conn: Arc::new(AtomicU64::new(1)),
         ice: Arc::new(ice_servers()),
+        conns: Arc::new(Mutex::new(HashMap::new())),
     };
 
     let app = Router::new()
         .route("/", get(index))
+        .route("/app.css", get(app_css))
+        .route("/app.js", get(app_js))
+        .route("/favicon.svg", get(favicon))
+        .route("/api/avatar", post(profile::set_avatar))
+        .route("/api/avatar/clear", post(profile::clear_avatar))
+        .route("/api/avatar/{id}", get(profile::get_avatar))
         .route("/api/register", post(auth::register))
         .route("/api/login", post(auth::login))
         .route("/api/logout", post(auth::logout))
@@ -91,7 +106,38 @@ async fn main() {
     axum::serve(listener, app).await.expect("errore del server");
 }
 
-/// La pagina del client è incorporata nel binario.
+/// Il client (pagina, stile, script, icona) è incorporato nel binario.
 async fn index() -> Html<&'static str> {
     Html(include_str!("../static/index.html"))
+}
+
+/// `no-cache`: il browser controlla sempre di avere la versione giusta dopo un aggiornamento.
+async fn app_css() -> impl IntoResponse {
+    (
+        [
+            (header::CONTENT_TYPE, "text/css; charset=utf-8"),
+            (header::CACHE_CONTROL, "no-cache"),
+        ],
+        include_str!("../static/app.css"),
+    )
+}
+
+async fn app_js() -> impl IntoResponse {
+    (
+        [
+            (header::CONTENT_TYPE, "text/javascript; charset=utf-8"),
+            (header::CACHE_CONTROL, "no-cache"),
+        ],
+        include_str!("../static/app.js"),
+    )
+}
+
+async fn favicon() -> impl IntoResponse {
+    (
+        [
+            (header::CONTENT_TYPE, "image/svg+xml"),
+            (header::CACHE_CONTROL, "public, max-age=86400"),
+        ],
+        include_str!("../static/favicon.svg"),
+    )
 }
