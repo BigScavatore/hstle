@@ -3,7 +3,7 @@
 const $ = (id) => document.getElementById(id);
 const TOKEN_KEY = 'hstle-token';
 const CHAN_KEY = 'hstle-channel';
-const ROLES = ['mic', 'cam', 'screen'];      // le tre "corsie" fisse di ogni connessione WebRTC
+const ROLES = ['mic', 'cam', 'screen', 'sa'];  // le quattro "corsie" fisse di ogni connessione WebRTC (sa = audio dello schermo)
 
 const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
@@ -848,7 +848,7 @@ function bannerFor(accent) {
   return b;
 }
 
-function showProfile(uid, ev) {
+function showProfile(uid, ev, screenAudio) {
   const m = members.get(uid);
   if (!m) return;
   const pop = $('pop');
@@ -875,7 +875,9 @@ function showProfile(uid, ev) {
   } else if (me) {
     body.append(el('button', { className: 'btn ghost', onclick: () => { closePop(); openSettings('profile'); } }, 'Modifica il profilo'));
   }
-  pop.append(bannerFor(accentOf(uid)), body);
+  if (screenAudio) {
+    pop.append(el('div', { className: 'body', style: 'margin-top:0;padding-top:16px' }, volumeBlock('s' + uid, 'Audio dello schermo di ' + dname(uid))));
+  } else pop.append(bannerFor(accentOf(uid)), body);
   pop.hidden = false;
   // posizione vicino al punto cliccato, senza uscire dallo schermo
   const r = (ev && ev.currentTarget && ev.currentTarget.getBoundingClientRect) ? ev.currentTarget.getBoundingClientRect() : { left: 20, top: 80, right: 20, bottom: 80 };
@@ -896,7 +898,7 @@ function volOf(uid) { const v = vols[uid] || {}; return { v: typeof v.v === 'num
 function setVol(uid, patch) {
   vols[uid] = { ...volOf(uid), ...patch };
   lsSet('hstle-vol', JSON.stringify(vols));
-  const p = voice.peers.get(uid);
+  const p = voice.peers.get(typeof uid === 'string' ? Number(uid.slice(1)) : uid);   // 's<id>' = audio della condivisione
   if (p) applyPeerGain(p);
 }
 function applyPeerGain(peer) {
@@ -904,12 +906,18 @@ function applyPeerGain(peer) {
   const g = m ? 0 : v / 100;
   if (peer.gain) peer.gain.gain.value = g;
   else if (peer.audio) peer.audio.volume = Math.min(1, g);
+  const sv = volOf('s' + peer.id);
+  const sg = sv.m ? 0 : sv.v / 100;
+  if (peer.sa) {
+    if (peer.sa.gain) peer.sa.gain.gain.value = sg;
+    else peer.sa.audio.volume = Math.min(1, sg);
+  }
 }
-function volumeBlock(uid) {
+function volumeBlock(uid, label) {
   const { v, m } = volOf(uid);
   const out = el('span', { textContent: m ? 'Muto per te' : v + '%' });
   const range = el('input', { type: 'range', min: 0, max: 200, step: 5, value: v });
-  range.setAttribute('aria-label', 'Volume di ' + dname(uid));
+  range.setAttribute('aria-label', label || 'Volume di ' + dname(uid));
   const paint = () => range.style.setProperty('--p', (range.value / 200 * 100) + '%');
   paint();
   range.oninput = () => {
@@ -926,7 +934,7 @@ function volumeBlock(uid) {
     out.textContent = now ? 'Muto per te' : volOf(uid).v + '%';
   };
   return el('div', { className: 'vol' },
-    el('div', { className: 'hd' }, el('span', { textContent: 'Volume (solo per te)' }), out), range, mbtn);
+    el('div', { className: 'hd' }, el('span', { textContent: label || 'Volume (solo per te)' }), out), range, mbtn);
 }
 
 /* ================= impostazioni ================= */
@@ -1196,7 +1204,7 @@ const voice = {
   joinV: 0, lastV: -1,
   members: new Map(),     // id -> {id, username, channel, muted, deaf, cam, screen}
   peers: new Map(),
-  mic: null, cam: null, scr: null,
+  mic: null, cam: null, scr: null, scrAudio: null,
   camStream: null, scrStream: null,
   muted: false, deaf: false,     // scelte della persona: valgono anche prima di entrare
   ice: [{ urls: ['stun:stun.l.google.com:19302'] }],
@@ -1259,7 +1267,7 @@ document.addEventListener('click', (e) => {
 function applyAudioState() {
   if (voice.mic) voice.mic.enabled = !isMuted();
   if (master) master.gain.value = voice.deaf ? 0 : 1;
-  for (const p of voice.peers.values()) if (p.audio) p.audio.muted = voice.deaf || !!p.gain;   // senza WebAudio il volume passa dall'elemento
+  for (const p of voice.peers.values()) { if (p.audio) p.audio.muted = voice.deaf || !!p.gain; if (p.sa) p.sa.audio.muted = voice.deaf || !!p.sa.gain; }   // senza WebAudio il volume passa dall'elemento
   if (voice.active) sendMeta();
   renderAll();
 }
@@ -1368,6 +1376,11 @@ function renderTiles() {
     } else t.ph.replaceChildren();
     // volume: solo sulle persone degli altri
     t.vol && t.vol.remove();
+    if (w.kind === 'screen' && me && w.id !== me.id && peerHasScreenAudio(w.id)) {
+      t.vol = iconBtn(volOf('s' + w.id).m ? 'volume-x' : 'volume', 'Volume audio dello schermo', (e) => showProfile(w.id, e, true));
+      t.vol.dataset.keepPop = '1';
+      t.tc.prepend(t.vol);
+    }
     if (w.kind === 'cam' && me && w.id !== me.id) {
       t.vol = iconBtn(volOf(w.id).m ? 'volume-x' : 'volume', 'Volume di ' + dname(w.id), (e) => { e.currentTarget.dataset.keepPop = '1'; showProfile(w.id, e); });
       t.vol.dataset.keepPop = '1';
@@ -1444,8 +1457,8 @@ function onVoiceJoined(m) {
 }
 function onVoiceError(m) {
   voice.joining = false;
-  [voice.mic, voice.cam, voice.scr].forEach((t) => t && t.stop());
-  voice.mic = voice.cam = voice.scr = voice.camStream = voice.scrStream = null;
+  [voice.mic, voice.cam, voice.scr, voice.scrAudio].forEach((t) => t && t.stop());
+  voice.mic = voice.cam = voice.scr = voice.scrAudio = voice.camStream = voice.scrStream = null;
   inStage = false;
   note(m.error || 'Impossibile entrare nel canale vocale.');
   renderAll();
@@ -1492,8 +1505,8 @@ async function joinVoice(channel) {
 function leaveVoice(notify = true) {
   if (notify && (voice.active || voice.joining)) sendWs({ t: 'voice_leave' });
   for (const id of [...voice.peers.keys()]) closePeer(id);
-  [voice.mic, voice.cam, voice.scr].forEach((t) => t && t.stop());
-  voice.mic = voice.cam = voice.scr = voice.camStream = voice.scrStream = null;
+  [voice.mic, voice.cam, voice.scr, voice.scrAudio].forEach((t) => t && t.stop());
+  voice.mic = voice.cam = voice.scr = voice.scrAudio = voice.camStream = voice.scrStream = null;
   watchers.clear();
   voice.active = voice.joining = false;
   voice.channel = null;
@@ -1530,15 +1543,24 @@ async function toggleScreen() {
   if (!voice.active) return;
   if (voice.scr) {
     voice.scr.stop();
-    voice.scr = voice.scrStream = null;
+    if (voice.scrAudio) voice.scrAudio.stop();
+    voice.scr = voice.scrAudio = voice.scrStream = null;
   } else {
     try {
-      const s = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 20 } }, audio: false });
+      const s = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: 20 } },
+        // l'audio del computer: niente filtri (rovinerebbero musica e giochi) e, per le schede, non si risente in locale
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, suppressLocalAudioPlayback: true },
+        systemAudio: 'include',
+      });
       const t = s.getVideoTracks()[0];
+      const au = s.getAudioTracks()[0] || null;
       t.contentHint = 'detail';
       t.onended = () => { if (voice.scr === t) toggleScreen(); };
       voice.scr = t;
+      voice.scrAudio = au;
       voice.scrStream = new MediaStream([t]);
+      if (!au) note('Schermo condiviso senza audio: nella finestra di scelta spunta "Condividi anche l\'audio" (solo Chrome ed Edge, e non con una singola finestra).');
     } catch { return; }       // annullato dalla persona
   }
   afterLocalChange();
@@ -1549,14 +1571,14 @@ function sdpOf(d) { return { type: d.type, sdp: d.sdp }; }
 function sendSignal(to, data) { sendWs({ t: 'signal', to, data }); }
 
 function attachLocalTracks(peer) {
-  const want = [voice.mic, voice.cam, voice.scr];
-  peer.pc.getTransceivers().slice(0, 3).forEach((tr, i) => {
+  const want = [voice.mic, voice.cam, voice.scr, voice.scrAudio];
+  peer.pc.getTransceivers().slice(0, 4).forEach((tr, i) => {
     const track = want[i] || null;
     if (tr.sender.track === track) return;
     tr.sender.replaceTrack(track).then(() => { if (track) limitBitrate(peer, i); }).catch(() => {});
   });
 }
-const MAX_BITRATE = [64000, 700000, 2500000];
+const MAX_BITRATE = [64000, 700000, 2500000, 96000];
 async function limitBitrate(peer, i) {
   try {
     const sender = peer.pc.getTransceivers()[i].sender;
@@ -1573,14 +1595,15 @@ function createPeer(id, offerer) {
     id, pc, offerer,
     session: offerer ? Math.random().toString(36).slice(2) : null,
     pendingIce: [],
-    streams: { mic: new MediaStream(), cam: new MediaStream(), screen: new MediaStream() },
-    audio: null, gain: null,
+    streams: { mic: new MediaStream(), cam: new MediaStream(), screen: new MediaStream(), sa: new MediaStream() },
+    audio: null, gain: null, sa: null,
   };
   voice.peers.set(id, peer);
   if (offerer) {
     pc.addTransceiver('audio', { direction: 'sendrecv' });
     pc.addTransceiver('video', { direction: 'sendrecv' });
     pc.addTransceiver('video', { direction: 'sendrecv' });
+    pc.addTransceiver('audio', { direction: 'sendrecv' });   // corsia 3: audio dello schermo
     attachLocalTracks(peer);
   }
   pc.onicecandidate = (e) => { if (e.candidate) sendSignal(id, { candidate: e.candidate.toJSON() }); };
@@ -1589,6 +1612,7 @@ function createPeer(id, offerer) {
     if (!role) return;
     peer.streams[role].addTrack(e.track);
     if (role === 'mic') startRemoteAudio(peer);
+    if (role === 'sa') startScreenAudio(peer);
     renderTiles();
   };
   pc.onnegotiationneeded = async () => {
@@ -1626,6 +1650,30 @@ function startRemoteAudio(peer) {
   watchSpeaking('p' + peer.id, peer.streams.mic);
 }
 
+/** Audio della condivisione schermo di un altro: stesso percorso, ma con un volume suo. */
+function startScreenAudio(peer) {
+  if (peer.sa) return;
+  const a = new Audio();
+  a.autoplay = true;
+  a.srcObject = peer.streams.sa;
+  peer.sa = { audio: a, gain: null, src: null };
+  try {
+    ensureAudioCtx();
+    peer.sa.src = actx.createMediaStreamSource(peer.streams.sa);
+    peer.sa.gain = actx.createGain();
+    peer.sa.src.connect(peer.sa.gain);
+    peer.sa.gain.connect(master);
+    a.muted = true;
+  } catch { a.muted = voice.deaf; }
+  applyPeerGain(peer);
+  a.play().catch(() => {});
+  renderTiles();
+}
+function peerHasScreenAudio(id) {
+  const p = voice.peers.get(id);
+  return !!(p && p.streams.sa.getAudioTracks().length);
+}
+
 function closePeer(id) {
   const peer = voice.peers.get(id);
   if (!peer) return;
@@ -1633,7 +1681,8 @@ function closePeer(id) {
   pc.onicecandidate = pc.ontrack = pc.onnegotiationneeded = pc.onconnectionstatechange = null;
   pc.close();
   if (peer.audio) peer.audio.srcObject = null;
-  try { peer.src && peer.src.disconnect(); peer.gain && peer.gain.disconnect(); } catch {}
+  if (peer.sa) peer.sa.audio.srcObject = null;
+  try { peer.src && peer.src.disconnect(); peer.gain && peer.gain.disconnect(); peer.sa && peer.sa.src && peer.sa.src.disconnect(); peer.sa && peer.sa.gain && peer.sa.gain.disconnect(); } catch {}
   watchers.delete('p' + id);
   voice.peers.delete(id);
   renderTiles();
@@ -1658,7 +1707,7 @@ async function handleSignal(from, data) {
     if (!peer) { peer = createPeer(from, false); peer.session = data.session; }
     const pc = peer.pc;
     await pc.setRemoteDescription(data.sdp);
-    pc.getTransceivers().slice(0, 3).forEach((t) => { t.direction = 'sendrecv'; });
+    pc.getTransceivers().slice(0, 4).forEach((t) => { t.direction = 'sendrecv'; });
     attachLocalTracks(peer);
     await pc.setLocalDescription(await pc.createAnswer());
     sendSignal(from, { sdp: sdpOf(pc.localDescription), session: peer.session });

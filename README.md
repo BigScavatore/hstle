@@ -13,6 +13,7 @@ Pensata per pochi utenti e server con poca RAM.
 - Modifica ed eliminazione dei messaggi inviati
 - Client web incorporato nel binario
 - Più canali vocali (creare, rinominare, eliminare) con audio, webcam e condivisione schermo (WebRTC mesh, fino a 8 persone per canale)
+- Audio della condivisione schermo (Chrome/Edge: spunta "Condividi audio"), con volume separato per chi guarda
 - Schermo intero e "primo piano" per ogni video e condivisione schermo
 - Profilo: nome visualizzato, presentazione, colore e immagine (ridimensionata dal browser, max 128 KB)
 - Messaggi privati con non letti, modifica ed eliminazione dei propri; chi è online
