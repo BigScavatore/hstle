@@ -115,7 +115,7 @@ function openPicker() {
     });
     picker.setMenu(null);
     picker.loadFile(path.join(__dirname, 'picker.html'));
-    picker.on('closed', () => { picker = null; pickerDone(null); });
+    picker.on('closed', () => { picker = null; if (pickerDone) pickerDone(null); pickerDone = null; });
   });
 }
 /** Trova il programma a cui appartiene una finestra (per catturare solo il suo audio). */
