@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<style>
+  body{margin:0;padding:22px;background:#130d20;color:#ece8f8;font:14px system-ui,sans-serif;display:flex;flex-direction:column;gap:12px}
+  h1{margin:0;font-size:17px} p{margin:0;color:#8d82aa}
+  input{background:#08050f;border:1px solid #2b1f44;border-radius:10px;padding:10px 12px;color:inherit;font:inherit;width:100%}
+  input:focus{outline:2px solid #8b5cf6;border-color:#8b5cf6}
+  .row{display:flex;gap:10px;justify-content:flex-end}
+  button{border:0;border-radius:10px;padding:9px 18px;font:inherit;font-weight:600;cursor:pointer;color:#fff;background:#8b5cf6} button.g{background:#231836}
+  #err{color:#f2506e;min-height:1.2em}
+</style></head><body>
+<h1>Indirizzo del server</h1>
+<p>Per esempio https://miosito.it:8444</p>
+<input id="u" autocomplete="off" spellcheck="false">
+<div id="err"></div>
+<div class="row"><button class="g" id="c" type="button">Annulla</button><button id="s" type="button">Salva e apri</button></div>
+<script>
+const u = document.getElementById('u');
+hstleDesktop.getServer().then((v) => { u.value = v; u.select(); });
+async function save() { if (!(await hstleDesktop.setServer(u.value))) document.getElementById('err').textContent = 'Indirizzo non valido: deve iniziare con http:// o https://'; }
+document.getElementById('s').onclick = save;
+document.getElementById('c').onclick = () => window.close();
+u.onkeydown = (e) => { if (e.key === 'Enter') save(); else if (e.key === 'Escape') window.close(); };
+</script></body></html>

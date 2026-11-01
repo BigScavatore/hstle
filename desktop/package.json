@@ -1,0 +1,22 @@
+{
+  "name": "hstle-desktop",
+  "version": "0.1.0",
+  "description": "Hstle per Windows: il client web in una finestra, con condivisione di schermo e audio di sistema",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win zip"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "it.hstle.desktop",
+    "productName": "Hstle",
+    "files": ["main.js", "preload.js", "picker.html", "server.html", "icon.png", "package.json"],
+    "win": { "target": ["zip"], "icon": "icon.png", "signAndEditExecutable": false },
+    "directories": { "output": "dist" }
+  }
+}

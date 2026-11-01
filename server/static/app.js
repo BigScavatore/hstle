@@ -1550,7 +1550,7 @@ async function toggleScreen() {
       const s = await navigator.mediaDevices.getDisplayMedia({
         video: { frameRate: { ideal: 20 } },
         // l'audio del computer: niente filtri (rovinerebbero musica e giochi) e, per le schede, non si risente in locale
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, suppressLocalAudioPlayback: true },
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, suppressLocalAudioPlayback: true, restrictOwnAudio: true },
         systemAudio: 'include',
       });
       const t = s.getVideoTracks()[0];

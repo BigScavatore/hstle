@@ -155,6 +155,23 @@ da un altro dispositivo, la prima connessione viene espulsa dal canale.
 | `POST /api/avatar/clear` | toglie la propria immagine |
 | `GET /api/avatar/{id}` | immagine di un utente; serve il token (non è pubblica) |
 
+## App desktop per Windows
+
+Nella cartella `desktop/` c'è un'app Electron che apre il client del tuo server in una finestra
+Chromium. Serve soprattutto a condividere lo schermo **con l'audio del computer**, cosa che
+Firefox non permette. Ha un selettore proprio (schermi e finestre con anteprima) e l'indirizzo
+del server si cambia dal menu *Hstle → Cambia server*.
+
+```bash
+cd desktop
+npm install
+npm start            # prova
+npm run dist         # crea dist/Hstle-0.1.0-win.zip
+```
+
+Lo zip si estrae dove si vuole e si avvia con `Hstle.exe` (non è firmato: Windows può mostrare
+l'avviso di SmartScreen, "Ulteriori informazioni → Esegui comunque").
+
 ## Build per il server
 
 ```bash
