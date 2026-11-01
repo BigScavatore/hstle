@@ -13,6 +13,12 @@ Pensata per pochi utenti e server con poca RAM.
 - Modifica ed eliminazione dei messaggi inviati
 - Client web incorporato nel binario
 - Più canali vocali (creare, rinominare, eliminare) con audio, webcam e condivisione schermo (WebRTC mesh, fino a 8 persone per canale)
+- Audio della condivisione schermo (Chrome/Edge: spunta "Condividi audio"), con volume separato per chi guarda
+- Schermo intero e "primo piano" per ogni video e condivisione schermo
+- Profilo: nome visualizzato, presentazione, colore e immagine (ridimensionata dal browser, max 128 KB)
+- Messaggi privati con non letti, modifica ed eliminazione dei propri; chi è online
+- Cuffie (disattiva l'audio, e il microfono con esso), volume per ogni persona (0–200%, solo per te) e riduzione del rumore attivabile
+- Interfaccia viola e nera, anche da telefono
 
 ## Avvio
 
@@ -37,8 +43,9 @@ Variabili d'ambiente:
 $env:HSTLE_ADDR = "0.0.0.0:3000"; cargo run
 ```
 
-Il database (`hstle.db`) è un singolo file: per il backup basta copiarlo
-a server fermo.
+Il database (`hstle.db`) è un singolo file (SQLite in modalità WAL: durante l'uso
+vicino compaiono anche `hstle.db-wal` e `hstle.db-shm`). Per il backup ferma il
+server e copia tutti i file `hstle.db*`.
 
 ## Protocollo WebSocket
 
@@ -63,6 +70,20 @@ Messaggi dal client:
 | `{"t":"channel_create","name":"..."}`, `channel_rename` (`id`,`name`), `channel_delete` (`id`) | Gestire i canali |
 | `{"t":"role_create","name","color","permissions"}`, `role_edit` (`id` + gli stessi campi), `role_delete` (`id`), `role_move` (`id`,`up`) | Gestire i ruoli |
 | `{"t":"member_roles","user":3,"roles":[2,5]}` | Gestire i ruoli |
+
+Profilo e messaggi privati:
+
+| Messaggio | Note |
+|-----------|------|
+| `{"t":"profile_update","display_name":"","bio":"","accent":"#8b5cf6"}` | nome (max 32), presentazione (max 190), colore `#rrggbb` |
+| `{"t":"dm_send","to":3,"text":"..."}`, `dm_edit` (`id`,`text`), `dm_delete` (`id`) | modifica ed eliminazione solo dei propri; serve *Scrivere messaggi* |
+| `{"t":"dm_history","with":3}` → `dm_history` | ultimi messaggi con quella persona |
+| `{"t":"dm_read","with":3}` | segna come letta la conversazione |
+| `{"t":"voice_meta","muted":false,"deaf":false,"cam":false,"screen":false}` | stato mostrato agli altri |
+
+Dal server arrivano anche `presence` (`online`: id connessi), `dm_summary`
+(conversazioni e non letti), `dm_message`, `dm_edited`, `dm_deleted`. I messaggi
+privati li ricevono solo mittente e destinatario (su tutte le loro schede aperte).
 
 Eventi dal server a tutti: `message`, `message_edited` (messaggio completo con
 `edited`), `message_deleted` (`channel`,`id`), `channels`, `directory`. Se
@@ -130,6 +151,9 @@ da un altro dispositivo, la prima connessione viene espulsa dal canale.
 | `POST /api/login`    | `{username, password}` → `{token, user}`          |
 | `POST /api/logout`   | invalida il token (header `Authorization: Bearer`) |
 | `POST /api/invites`  | serve il permesso *Creare inviti* → `{code}` (monouso) |
+| `POST /api/avatar`   | corpo = immagine JPEG/PNG/WebP (max 128 KB), solo la propria |
+| `POST /api/avatar/clear` | toglie la propria immagine |
+| `GET /api/avatar/{id}` | immagine di un utente; serve il token (non è pubblica) |
 
 ## Build per il server
 

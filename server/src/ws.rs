@@ -81,13 +81,36 @@ enum ClientMsg {
     VoiceChannelDelete { id: i64 },
     #[serde(rename = "voice_leave")]
     VoiceLeave,
-    /// Stato locale: microfono spento, camera accesa, schermo condiviso.
+    /// Stato locale: microfono spento, cuffie mute, camera accesa, schermo condiviso.
     #[serde(rename = "voice_meta")]
     VoiceMeta {
         muted: bool,
+        #[serde(default)]
+        deaf: bool,
         cam: bool,
         screen: bool,
     },
+
+    // --- profilo ---
+    #[serde(rename = "profile_update")]
+    ProfileUpdate {
+        display_name: String,
+        bio: String,
+        accent: String,
+    },
+
+    // --- messaggi privati ---
+    #[serde(rename = "dm_history")]
+    DmHistory { with: i64 },
+    #[serde(rename = "dm_send")]
+    DmSend { to: i64, text: String },
+    #[serde(rename = "dm_edit")]
+    DmEdit { id: i64, text: String },
+    #[serde(rename = "dm_delete")]
+    DmDelete { id: i64 },
+    /// Segna come letta la conversazione con `with`.
+    #[serde(rename = "dm_read")]
+    DmRead { with: i64 },
     /// Offerte/risposte WebRTC e candidati ICE, inoltrati a un altro membro della chiamata.
     #[serde(rename = "signal")]
     Signal { to: i64, data: serde_json::Value },
@@ -143,6 +166,37 @@ pub async fn broadcast_channels(state: &AppState) {
     if let Some(v) = channels_msg(state).await {
         announce(state, v);
     }
+}
+
+// ---------- presenza e invii a un solo utente ----------
+
+/// Utenti con almeno una connessione aperta, in ordine.
+fn online_ids(state: &AppState) -> Vec<i64> {
+    let conns = state.conns.lock().unwrap_or_else(|e| e.into_inner());
+    let mut ids: Vec<i64> = conns.values().map(|(uid, _)| *uid).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    ids
+}
+
+fn presence_msg(state: &AppState) -> Value {
+    json!({ "t": "presence", "online": online_ids(state) })
+}
+
+/// Manda un messaggio a tutte le connessioni (schede, dispositivi) di un utente.
+fn send_to_user(state: &AppState, user_id: i64, value: &Value) {
+    let text = value.to_string();
+    let conns = state.conns.lock().unwrap_or_else(|e| e.into_inner());
+    for (uid, tx) in conns.values() {
+        if *uid == user_id {
+            let _ = tx.try_send(text.clone());
+        }
+    }
+}
+
+async fn dm_summary_msg(state: &AppState, user_id: i64) -> Option<Value> {
+    let list = state.db.dm_summary(user_id).await.ok()?;
+    Some(json!({ "t": "dm_summary", "conversations": list }))
 }
 
 /// Ruoli, membri e permessi aggiornati, per tutti. Si usa anche alla registrazione di un nuovo utente.
@@ -224,6 +278,20 @@ fn clean_channel_name(raw: &str) -> Option<String> {
     ok.then_some(name)
 }
 
+/// Nome visualizzato: vuoto (si usa il nome utente) oppure 1-32 caratteri senza controlli.
+fn clean_display_name(raw: &str) -> Option<String> {
+    let name = raw.trim();
+    let ok = name.chars().count() <= 32 && !name.chars().any(|ch| ch.is_control());
+    ok.then(|| name.to_string())
+}
+
+/// Presentazione: fino a 190 caratteri, a capo ammessi.
+fn clean_bio(raw: &str) -> Option<String> {
+    let bio = raw.trim();
+    let ok = bio.chars().count() <= 190 && !bio.chars().any(|ch| ch.is_control() && ch != '\n');
+    ok.then(|| bio.to_string())
+}
+
 fn clean_role_name(raw: &str) -> Option<String> {
     let name = raw.trim();
     let ok = (1..=32).contains(&name.chars().count()) && !name.chars().any(|ch| ch.is_control());
@@ -269,24 +337,38 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     let conn_id = state.next_conn.fetch_add(1, Ordering::Relaxed);
     let user_id = user.id;
 
+    // Canale privato di questa connessione (risposte, messaggi privati, segnalazione WebRTC).
+    let (ptx, mut prx) = mpsc::channel::<String>(256);
+
     // 2. Ci iscriviamo al broadcast PRIMA di leggere lo stato, così nessun evento
     //    va perso nel mezzo (il client scarta i doppioni per id).
     let mut rx = state.tx.subscribe();
+    // Da qui la persona risulta online (se è la sua prima connessione, lo diciamo a tutti).
+    let first_conn = {
+        let mut conns = state.conns.lock().unwrap_or_else(|e| e.into_inner());
+        let first = !conns.values().any(|(uid, _)| *uid == user_id);
+        conns.insert(conn_id, (user_id, ptx.clone()));
+        first
+    };
+    if first_conn {
+        announce(&state, presence_msg(&state));
+    }
     let voice_state = voice(&state).state_json();
     let mut initial = vec![json!({ "t": "ready", "user": user, "ice": *state.ice })];
     initial.extend(channels_msg(&state).await);
     initial.extend(directory_msg(&state).await);
     initial.extend(voice_channels_msg(&state).await);
     initial.push(voice_state);
+    initial.push(presence_msg(&state));
+    initial.extend(dm_summary_msg(&state, user_id).await);
     // La cronologia di un canale la chiede il client con `load_history`.
     for v in initial {
         if send_json(&mut sender, v).await.is_err() {
+            state.conns.lock().unwrap_or_else(|e| e.into_inner()).remove(&conn_id);
             return;
         }
     }
 
-    // Canale privato di questa connessione (risposte alla voce e segnalazione WebRTC).
-    let (ptx, mut prx) = mpsc::channel::<String>(256);
     let conn = Conn {
         id: conn_id,
         user,
@@ -330,10 +412,18 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         _ = &mut send_task => recv_task.abort(),
         _ = &mut recv_task => send_task.abort(),
     }
-    // Chi si disconnette esce anche dalla chiamata.
+    // Chi si disconnette esce anche dalla chiamata e, se era l'ultima connessione, da online.
     let new_state = voice(&state).leave(conn_id, user_id);
     if let Some(s) = new_state {
         announce(&state, s);
+    }
+    let last_conn = {
+        let mut conns = state.conns.lock().unwrap_or_else(|e| e.into_inner());
+        conns.remove(&conn_id);
+        !conns.values().any(|(uid, _)| *uid == user_id)
+    };
+    if last_conn {
+        announce(&state, presence_msg(&state));
     }
 }
 
@@ -510,10 +600,89 @@ async fn handle(st: &AppState, c: &Conn, msg: ClientMsg) {
                 announce(st, s);
             }
         }
-        ClientMsg::VoiceMeta { muted, cam, screen } => {
-            let new_state = voice(st).set_meta(c.id, c.user.id, muted, cam, screen);
+        ClientMsg::VoiceMeta {
+            muted,
+            deaf,
+            cam,
+            screen,
+        } => {
+            let new_state = voice(st).set_meta(c.id, c.user.id, muted, deaf, cam, screen);
             if let Some(s) = new_state {
                 announce(st, s);
+            }
+        }
+
+        // ----- profilo -----
+        ClientMsg::ProfileUpdate {
+            display_name,
+            bio,
+            accent,
+        } => {
+            let (Some(name), Some(bio), Some(accent)) = (
+                clean_display_name(&display_name),
+                clean_bio(&bio),
+                clean_color(&accent),
+            ) else {
+                c.notice("profilo non valido (nome fino a 32 caratteri, presentazione fino a 190, colore #rrggbb)");
+                return;
+            };
+            if st.db.profile_update(c.user.id, name, bio, accent).await.is_ok() {
+                broadcast_directory(st).await;
+            }
+        }
+
+        // ----- messaggi privati -----
+        ClientMsg::DmHistory { with } => {
+            let messages = st
+                .db
+                .dm_history(c.user.id, with, HISTORY_LIMIT)
+                .await
+                .unwrap_or_default();
+            c.reply(json!({ "t": "dm_history", "with": with, "messages": messages }));
+        }
+        ClientMsg::DmSend { to, text } => {
+            let text = clean_text(text);
+            if text.is_empty() {
+                return;
+            }
+            match flat(st.db.dm_send(c.user.id, to, text).await) {
+                Ok(m) => {
+                    let ev = json!({ "t": "dm_message", "message": m });
+                    send_to_user(st, c.user.id, &ev);
+                    send_to_user(st, to, &ev);
+                }
+                Err(e) => c.notice(e),
+            }
+        }
+        ClientMsg::DmEdit { id, text } => {
+            let text = clean_text(text);
+            if text.is_empty() {
+                c.notice("il messaggio non può essere vuoto: per toglierlo, eliminalo");
+                return;
+            }
+            match flat(st.db.dm_edit(c.user.id, id, text).await) {
+                Ok(m) => {
+                    let ev = json!({ "t": "dm_edited", "message": m });
+                    send_to_user(st, m.from, &ev);
+                    send_to_user(st, m.to, &ev);
+                }
+                Err(e) => c.notice(e),
+            }
+        }
+        ClientMsg::DmDelete { id } => match flat(st.db.dm_delete(c.user.id, id).await) {
+            Ok((from, to)) => {
+                let ev = json!({ "t": "dm_deleted", "id": id, "from": from, "to": to });
+                send_to_user(st, from, &ev);
+                send_to_user(st, to, &ev);
+            }
+            Err(e) => c.notice(e),
+        },
+        ClientMsg::DmRead { with } => {
+            if st.db.dm_read(c.user.id, with).await.is_ok() {
+                // Lo stato "letto" vale su tutte le schede e i dispositivi della persona.
+                if let Some(s) = dm_summary_msg(st, c.user.id).await {
+                    send_to_user(st, c.user.id, &s);
+                }
             }
         }
         ClientMsg::Signal { to, data } => {

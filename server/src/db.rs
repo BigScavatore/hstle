@@ -69,7 +69,33 @@ CREATE TABLE IF NOT EXISTS voice_channels (
 INSERT INTO voice_channels(id, name) SELECT 1, 'vocale' WHERE NOT EXISTS (SELECT 1 FROM voice_channels);
 -- Il canale iniziale si crea solo se non ce n'è nessuno (così #generale si può eliminare).
 INSERT INTO channels(id, name) SELECT 1, 'generale' WHERE NOT EXISTS (SELECT 1 FROM channels);
+CREATE TABLE IF NOT EXISTS dm_messages (
+    id         INTEGER PRIMARY KEY,
+    sender     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recipient  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    text       TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    edited_at  INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_dm_sender ON dm_messages(sender, recipient, id);
+CREATE INDEX IF NOT EXISTS idx_dm_recipient ON dm_messages(recipient, sender, id);
+-- Fino a quale messaggio privato di `peer_id` l'utente ha già letto.
+CREATE TABLE IF NOT EXISTS dm_reads (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    peer_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    last_id INTEGER NOT NULL,
+    PRIMARY KEY (user_id, peer_id)
+);
 ";
+
+/// Colonne del profilo, aggiunte ai database creati prima: (nome, definizione).
+const PROFILE_COLUMNS: [(&str, &str); 5] = [
+    ("display_name", "TEXT NOT NULL DEFAULT ''"),
+    ("bio", "TEXT NOT NULL DEFAULT ''"),
+    ("accent", "TEXT NOT NULL DEFAULT ''"),
+    ("avatar", "BLOB"),
+    ("avatar_mime", "TEXT NOT NULL DEFAULT ''"),
+];
 
 pub fn now() -> i64 {
     SystemTime::now()
@@ -126,6 +152,37 @@ pub struct Member {
     pub roles: Vec<i64>,
     /// Permessi effettivi, già calcolati.
     pub perms: i64,
+    /// Profilo: nome visualizzato (vuoto = si usa il nome utente), presentazione, colore.
+    pub display_name: String,
+    pub bio: String,
+    pub accent: String,
+    /// Versione dell'avatar (0 = nessun avatar): serve a ricaricarlo quando cambia.
+    pub avatar: i64,
+}
+
+/// Messaggio privato tra due utenti.
+#[derive(Serialize)]
+pub struct DmMsg {
+    pub id: i64,
+    pub from: i64,
+    pub to: i64,
+    pub text: String,
+    pub ts: i64,
+    pub edited: Option<i64>,
+}
+
+/// Una conversazione privata: con chi, l'ultimo messaggio e quanti ne mancano da leggere.
+#[derive(Serialize)]
+pub struct DmConv {
+    pub user: i64,
+    pub last_id: i64,
+    pub last_ts: i64,
+    pub unread: i64,
+}
+
+pub struct Avatar {
+    pub mime: String,
+    pub bytes: Vec<u8>,
 }
 
 pub struct Directory {
@@ -187,6 +244,19 @@ impl Db {
         )?;
         if has_edited == 0 {
             conn.execute("ALTER TABLE messages ADD COLUMN edited_at INTEGER", [])?;
+        }
+        // Profili (nome visualizzato, bio, colore, avatar): colonne aggiunte ai database esistenti.
+        let mut cols: Vec<(&str, &str)> = PROFILE_COLUMNS.to_vec();
+        cols.push(("avatar_v", "INTEGER NOT NULL DEFAULT 0"));
+        for (name, ddl) in cols {
+            let present: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('users') WHERE name = ?1",
+                [name],
+                |r| r.get(0),
+            )?;
+            if present == 0 {
+                conn.execute(&format!("ALTER TABLE users ADD COLUMN {name} {ddl}"), [])?;
+            }
         }
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -388,16 +458,27 @@ impl Db {
                 links.entry(user).or_default().push(role);
             }
 
-            let mut stmt =
-                c.prepare("SELECT id, username, is_admin FROM users ORDER BY username COLLATE NOCASE")?;
+            let mut stmt = c.prepare(
+                "SELECT id, username, is_admin, display_name, bio, accent,
+                        CASE WHEN avatar IS NULL THEN 0 ELSE avatar_v END
+                 FROM users ORDER BY username COLLATE NOCASE",
+            )?;
             let users = stmt
                 .query_map([], |r| {
-                    Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)? != 0))
+                    Ok((
+                        r.get::<_, i64>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, i64>(2)? != 0,
+                        r.get::<_, String>(3)?,
+                        r.get::<_, String>(4)?,
+                        r.get::<_, String>(5)?,
+                        r.get::<_, i64>(6)?,
+                    ))
                 })?
                 .collect::<rusqlite::Result<Vec<_>>>()?;
             let members = users
                 .into_iter()
-                .map(|(id, username, is_admin)| {
+                .map(|(id, username, is_admin, display_name, bio, accent, avatar)| {
                     let assigned = links.remove(&id).unwrap_or_default();
                     let granted = assigned
                         .iter()
@@ -408,6 +489,10 @@ impl Db {
                         is_admin,
                         perms: perms::effective(is_admin, granted),
                         roles: assigned,
+                        display_name,
+                        bio,
+                        accent,
+                        avatar,
                     }
                 })
                 .collect();
@@ -918,9 +1003,222 @@ impl Db {
         })
         .await
     }
+
+    // ---------- profilo ----------
+
+    pub async fn profile_update(
+        &self,
+        user_id: i64,
+        display_name: String,
+        bio: String,
+        accent: String,
+    ) -> Result<(), ApiError> {
+        self.call(move |c| {
+            c.execute(
+                "UPDATE users SET display_name = ?1, bio = ?2, accent = ?3 WHERE id = ?4",
+                params![display_name, bio, accent, user_id],
+            )?;
+            Ok(())
+        })
+        .await
+    }
+
+    pub async fn avatar_set(&self, user_id: i64, mime: String, bytes: Vec<u8>) -> Result<(), ApiError> {
+        self.call(move |c| {
+            c.execute(
+                "UPDATE users SET avatar = ?1, avatar_mime = ?2, avatar_v = avatar_v + 1 WHERE id = ?3",
+                params![bytes, mime, user_id],
+            )?;
+            Ok(())
+        })
+        .await
+    }
+
+    pub async fn avatar_clear(&self, user_id: i64) -> Result<(), ApiError> {
+        self.call(move |c| {
+            c.execute(
+                "UPDATE users SET avatar = NULL, avatar_mime = '', avatar_v = avatar_v + 1 WHERE id = ?1",
+                [user_id],
+            )?;
+            Ok(())
+        })
+        .await
+    }
+
+    pub async fn avatar_get(&self, user_id: i64) -> Result<Option<Avatar>, ApiError> {
+        self.call(move |c| {
+            c.query_row(
+                "SELECT avatar_mime, avatar FROM users WHERE id = ?1 AND avatar IS NOT NULL",
+                [user_id],
+                |r| {
+                    Ok(Avatar {
+                        mime: r.get(0)?,
+                        bytes: r.get(1)?,
+                    })
+                },
+            )
+            .optional()
+        })
+        .await
+    }
+
+    // ---------- messaggi privati ----------
+    //
+    // Li vedono solo i due partecipanti: ogni interrogazione parte dall'utente che chiede.
+
+    pub async fn dm_send(&self, from: i64, to: i64, text: String) -> Result<Verdict<DmMsg>, ApiError> {
+        self.call(move |c| {
+            if from == to {
+                return Ok(Err("non puoi scrivere a te stesso"));
+            }
+            if !access_in(c, from)?.can(perms::SEND_MESSAGES) {
+                return Ok(Err("non hai il permesso di scrivere"));
+            }
+            let exists: bool =
+                c.query_row("SELECT EXISTS(SELECT 1 FROM users WHERE id = ?1)", [to], |r| r.get(0))?;
+            if !exists {
+                return Ok(Err("l'utente non esiste"));
+            }
+            let ts = now();
+            c.execute(
+                "INSERT INTO dm_messages(sender, recipient, text, created_at) VALUES (?1, ?2, ?3, ?4)",
+                params![from, to, text, ts],
+            )?;
+            Ok(Ok(DmMsg {
+                id: c.last_insert_rowid(),
+                from,
+                to,
+                text,
+                ts,
+                edited: None,
+            }))
+        })
+        .await
+    }
+
+    pub async fn dm_edit(&self, user_id: i64, id: i64, text: String) -> Result<Verdict<DmMsg>, ApiError> {
+        self.call(move |c| {
+            let sender: Option<i64> = c
+                .query_row("SELECT sender FROM dm_messages WHERE id = ?1", [id], |r| r.get(0))
+                .optional()?;
+            let Some(sender) = sender else {
+                return Ok(Err("il messaggio non esiste più"));
+            };
+            if sender != user_id {
+                return Ok(Err("puoi modificare solo i tuoi messaggi"));
+            }
+            if !access_in(c, user_id)?.can(perms::SEND_MESSAGES) {
+                return Ok(Err("non hai il permesso di scrivere"));
+            }
+            c.execute(
+                "UPDATE dm_messages SET text = ?1, edited_at = ?2 WHERE id = ?3",
+                params![text, now(), id],
+            )?;
+            let msg = c.query_row(&format!("{DM_SELECT} WHERE id = ?1"), [id], row_dm)?;
+            Ok(Ok(msg))
+        })
+        .await
+    }
+
+    /// Elimina un proprio messaggio privato. Restituisce (mittente, destinatario).
+    pub async fn dm_delete(&self, user_id: i64, id: i64) -> Result<Verdict<(i64, i64)>, ApiError> {
+        self.call(move |c| {
+            let row: Option<(i64, i64)> = c
+                .query_row(
+                    "SELECT sender, recipient FROM dm_messages WHERE id = ?1",
+                    [id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .optional()?;
+            let Some((sender, recipient)) = row else {
+                return Ok(Err("il messaggio non esiste più"));
+            };
+            if sender != user_id {
+                return Ok(Err("puoi eliminare solo i tuoi messaggi"));
+            }
+            c.execute("DELETE FROM dm_messages WHERE id = ?1", [id])?;
+            Ok(Ok((sender, recipient)))
+        })
+        .await
+    }
+
+    /// Gli ultimi `limit` messaggi tra `user` e `peer`, dal più vecchio al più recente.
+    pub async fn dm_history(&self, user: i64, peer: i64, limit: i64) -> Result<Vec<DmMsg>, ApiError> {
+        self.call(move |c| {
+            let mut stmt = c.prepare(&format!(
+                "{DM_SELECT} WHERE (sender = ?1 AND recipient = ?2) OR (sender = ?2 AND recipient = ?1)
+                 ORDER BY id DESC LIMIT ?3"
+            ))?;
+            let mut v = stmt
+                .query_map(params![user, peer, limit], row_dm)?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            v.reverse();
+            Ok(v)
+        })
+        .await
+    }
+
+    /// Segna come letti i messaggi che `peer` ha mandato a `user`.
+    pub async fn dm_read(&self, user: i64, peer: i64) -> Result<(), ApiError> {
+        self.call(move |c| {
+            c.execute(
+                "INSERT INTO dm_reads(user_id, peer_id, last_id)
+                 VALUES (?1, ?2, COALESCE((SELECT MAX(id) FROM dm_messages WHERE sender = ?2 AND recipient = ?1), 0))
+                 ON CONFLICT(user_id, peer_id) DO UPDATE SET last_id = excluded.last_id",
+                params![user, peer],
+            )?;
+            Ok(())
+        })
+        .await
+    }
+
+    /// Le conversazioni di un utente, dalla più recente, con i messaggi non letti.
+    pub async fn dm_summary(&self, user: i64) -> Result<Vec<DmConv>, ApiError> {
+        self.call(move |c| {
+            let mut stmt = c.prepare(
+                "SELECT peer, MAX(id), MAX(created_at) FROM (
+                     SELECT recipient AS peer, id, created_at FROM dm_messages WHERE sender = ?1
+                     UNION ALL
+                     SELECT sender AS peer, id, created_at FROM dm_messages WHERE recipient = ?1
+                 ) GROUP BY peer ORDER BY MAX(id) DESC",
+            )?;
+            let rows = stmt
+                .query_map([user], |r| {
+                    Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            let mut out = Vec::with_capacity(rows.len());
+            for (peer, last_id, last_ts) in rows {
+                let unread: i64 = c.query_row(
+                    "SELECT COUNT(*) FROM dm_messages
+                     WHERE sender = ?2 AND recipient = ?1
+                       AND id > COALESCE((SELECT last_id FROM dm_reads WHERE user_id = ?1 AND peer_id = ?2), 0)",
+                    params![user, peer],
+                    |r| r.get(0),
+                )?;
+                out.push(DmConv { user: peer, last_id, last_ts, unread });
+            }
+            Ok(out)
+        })
+        .await
+    }
 }
 
 // ---------- funzioni d'appoggio ----------
+
+const DM_SELECT: &str =
+    "SELECT id, sender, recipient, text, created_at, edited_at FROM dm_messages";
+
+fn row_dm(r: &rusqlite::Row<'_>) -> rusqlite::Result<DmMsg> {
+    Ok(DmMsg {
+        id: r.get(0)?,
+        from: r.get(1)?,
+        to: r.get(2)?,
+        text: r.get(3)?,
+        ts: r.get(4)?,
+        edited: r.get(5)?,
+    })
+}
 
 const MSG_SELECT: &str = "SELECT m.id, m.channel_id, u.id, u.username, m.text, m.created_at, m.edited_at
      FROM messages m JOIN users u ON u.id = m.user_id";

@@ -14,6 +14,8 @@ struct Member {
     channel: i64,
     username: String,
     muted: bool,
+    /// Cuffie mute: non sente gli altri (e di norma ha anche il microfono spento).
+    deaf: bool,
     cam: bool,
     screen: bool,
     /// Canale privato verso quella connessione (segnalazione WebRTC, "kicked").
@@ -42,6 +44,7 @@ impl Voice {
                     "username": m.username,
                     "channel": m.channel,
                     "muted": m.muted,
+                    "deaf": m.deaf,
                     "cam": m.cam,
                     "screen": m.screen,
                 })
@@ -84,6 +87,7 @@ impl Voice {
                 channel,
                 username: user.username.clone(),
                 muted: false,
+                deaf: false,
                 cam: false,
                 screen: false,
                 tx,
@@ -144,12 +148,14 @@ impl Voice {
         conn: u64,
         user_id: i64,
         muted: bool,
+        deaf: bool,
         cam: bool,
         screen: bool,
     ) -> Option<Value> {
         match self.members.get_mut(&user_id) {
             Some(m) if m.conn == conn => {
                 m.muted = muted;
+                m.deaf = deaf;
                 m.cam = cam;
                 m.screen = screen;
                 self.v += 1;
