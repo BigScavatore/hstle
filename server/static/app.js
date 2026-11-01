@@ -1275,14 +1275,49 @@ function toggleMute() {
   if (voice.deaf) { voice.deaf = false; voice.muted = false; }       // riattivare il microfono riattiva anche l'audio
   else voice.muted = !voice.muted;
   applyAudioState();
+  playSound(isMuted() ? 'mute' : 'unmute');
 }
 function toggleDeaf() {
   voice.deaf = !voice.deaf;
   applyAudioState();
+  playSound(voice.deaf ? 'deaf' : 'undeaf');
+}
+
+/* ---------- suoni (generati dal browser: nessun file da scaricare) ---------- */
+let sounds = lsGet('hstle-sounds') !== '0';
+const SOUNDS = {
+  join: [[523, 0, .12], [784, .1, .2]],
+  leave: [[784, 0, .12], [523, .1, .2]],
+  peerJoin: [[660, 0, .1], [880, .08, .14]],
+  peerLeave: [[660, 0, .1], [440, .08, .16]],
+  mute: [[330, 0, .09]],
+  unmute: [[494, 0, .09]],
+  deaf: [[294, 0, .1], [220, .08, .14]],
+  undeaf: [[220, 0, .1], [294, .08, .14]],
+};
+function playSound(kind) {
+  if (!sounds || !SOUNDS[kind]) return;
+  if (voice.deaf && kind !== 'deaf') return;          // con le cuffie spente non si sente niente, tranne il segnale che le hai spente
+  ensureAudioCtx();
+  if (!actx) return;
+  const t0 = actx.currentTime + 0.02;
+  for (const [f, at, d] of SOUNDS[kind]) {
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = 'sine';
+    o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t0 + at);
+    g.gain.exponentialRampToValueAtTime(0.16, t0 + at + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + d);
+    o.connect(g);
+    g.connect(actx.destination);
+    o.start(t0 + at);
+    o.stop(t0 + at + d + 0.03);
+  }
 }
 
 /* ---------- riduzione del rumore ---------- */
-function micConstraints() { return { echoCancellation: true, noiseSuppression: ns, autoGainControl: true }; }
+// channelCount: 1 = microfono mono: con alcuni microfoni (USB, cuffie) l'altro canale è vuoto e dall'altra parte si sentirebbe da un lato solo
+function micConstraints() { return { echoCancellation: true, noiseSuppression: ns, autoGainControl: true, channelCount: 1 }; }
 function renderNsNote() {
   const sup = navigator.mediaDevices && navigator.mediaDevices.getSupportedConstraints && navigator.mediaDevices.getSupportedConstraints().noiseSuppression;
   $('nsNote').textContent = sup === false
@@ -1312,6 +1347,8 @@ async function setNs(on) {
   } catch { note('Non riesco a cambiare la riduzione del rumore.'); }
 }
 $('nsToggle').onchange = (e) => setNs(e.target.checked);
+$('soundToggle').checked = sounds;
+$('soundToggle').onchange = (e) => { sounds = e.target.checked; lsSet('hstle-sounds', sounds ? '1' : '0'); if (sounds) playSound('join'); };
 
 /* ---------- griglia video ---------- */
 function makeTile(key) {
@@ -1434,7 +1471,12 @@ setInterval(() => {
 function onVoiceState(m) {
   if (m.v <= voice.lastV) return;
   voice.lastV = m.v;
+  const before = new Set([...voice.members.values()].filter((x) => x.channel === voice.channel).map((x) => x.id));
   voice.members = new Map(m.members.map((x) => [x.id, x]));
+  if (voice.active && m.v > voice.joinV && me) {                       // qualcuno entra o esce dal mio canale
+    for (const x of voice.members.values()) if (x.channel === voice.channel && x.id !== me.id && !before.has(x.id)) playSound('peerJoin');
+    for (const id of before) if (id !== me.id && !(voice.members.get(id) && voice.members.get(id).channel === voice.channel)) playSound('peerLeave');
+  }
   if (voice.active && m.v >= voice.joinV && me && !voice.members.has(me.id)) { leaveVoice(false); return; }
   for (const id of [...voice.peers.keys()]) {
     const pm = voice.members.get(id);
@@ -1445,6 +1487,7 @@ function onVoiceState(m) {
 function onVoiceJoined(m) {
   voice.joining = false;
   voice.active = true;
+  playSound('join');
   voice.joinV = m.v;
   voice.channel = m.channel;
   if (voice.mic) { voice.mic.enabled = !isMuted(); watchSpeaking('me', new MediaStream([voice.mic])); }
@@ -1503,9 +1546,11 @@ async function joinVoice(channel) {
   }
 }
 function leaveVoice(notify = true) {
+  if (voice.active) playSound('leave');
   if (notify && (voice.active || voice.joining)) sendWs({ t: 'voice_leave' });
   for (const id of [...voice.peers.keys()]) closePeer(id);
   [voice.mic, voice.cam, voice.scr, voice.scrAudio].forEach((t) => t && t.stop());
+  stopAppAudio();
   voice.mic = voice.cam = voice.scr = voice.scrAudio = voice.camStream = voice.scrStream = null;
   watchers.clear();
   voice.active = voice.joining = false;
@@ -1544,26 +1589,88 @@ async function toggleScreen() {
   if (voice.scr) {
     voice.scr.stop();
     if (voice.scrAudio) voice.scrAudio.stop();
+    stopAppAudio();
     voice.scr = voice.scrAudio = voice.scrStream = null;
   } else {
     try {
       const s = await navigator.mediaDevices.getDisplayMedia({
         video: { frameRate: { ideal: 20 } },
         // l'audio del computer: niente filtri (rovinerebbero musica e giochi) e, per le schede, non si risente in locale
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, suppressLocalAudioPlayback: true },
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, suppressLocalAudioPlayback: true, restrictOwnAudio: true },
         systemAudio: 'include',
       });
       const t = s.getVideoTracks()[0];
-      const au = s.getAudioTracks()[0] || null;
+      let au = s.getAudioTracks()[0] || null;
+      if (!au && window.hstleApp && await hstleApp.appAudioActive().catch(() => false)) au = await appAudioTrack();   // app desktop: audio di una sola app
       t.contentHint = 'detail';
       t.onended = () => { if (voice.scr === t) toggleScreen(); };
       voice.scr = t;
       voice.scrAudio = au;
       voice.scrStream = new MediaStream([t]);
-      if (!au) note('Schermo condiviso senza audio: nella finestra di scelta spunta "Condividi anche l\'audio" (solo Chrome ed Edge, e non con una singola finestra).');
+      if (!au && !window.hstleApp) note('Schermo condiviso senza audio: nella finestra di scelta spunta "Condividi anche l\'audio" (solo Chrome ed Edge, e non con una singola finestra).');
     } catch { return; }       // annullato dalla persona
   }
   afterLocalChange();
+}
+
+/* ---------- audio di una sola app (solo nell'app desktop) ----------
+   L'app desktop cattura l'audio del programma scelto e lo manda qui come PCM a 48 kHz, 16 bit, stereo.
+   Lo rimettiamo in un flusso audio con un piccolo AudioWorklet, e da lì viaggia come l'audio dello schermo. */
+const WORKLET = `class P extends AudioWorkletProcessor {
+  constructor() { super(); this.q = []; this.n = 0; this.off = 0; this.on = false;
+    this.port.onmessage = (e) => { this.q.push(e.data); this.n += e.data.length >> 1; }; }
+  process(_, outs) {
+    const o = outs[0], L = o[0], R = o[1] || o[0], need = L.length;
+    if (!this.on && this.n >= 2880) this.on = true;                     // parte con 60 ms di scorta
+    if (this.n > 14400) { while (this.n > 4800 && this.q.length) { const f = this.q.shift(); this.n -= (f.length >> 1) - this.off; this.off = 0; } }   // oltre 300 ms: salta a 100 ms
+    if (!this.on) return true;
+    let i = 0;
+    while (i < need) {
+      if (!this.q.length) { this.on = false; break; }
+      const f = this.q[0], frames = f.length >> 1, take = Math.min(need - i, frames - this.off);
+      for (let k = 0; k < take; k++) { L[i + k] = f[(this.off + k) * 2]; R[i + k] = f[(this.off + k) * 2 + 1]; }
+      i += take; this.off += take; this.n -= take;
+      if (this.off >= frames) { this.q.shift(); this.off = 0; }
+    }
+    return true;
+  }
+}
+registerProcessor('hstle-app-audio', P);`;
+let appAudio = null;
+async function appAudioTrack() {
+  closeAppAudio();
+  try {
+    const ctx = new AudioContext({ sampleRate: 48000, latencyHint: 'interactive' });
+    const url = URL.createObjectURL(new Blob([WORKLET], { type: 'text/javascript' }));
+    await ctx.audioWorklet.addModule(url);
+    URL.revokeObjectURL(url);
+    const node = new AudioWorkletNode(ctx, 'hstle-app-audio', { numberOfInputs: 0, outputChannelCount: [2] });
+    const dest = ctx.createMediaStreamDestination();
+    node.connect(dest);
+    ctx.resume().catch(() => {});
+    let rest = new Uint8Array(0);
+    hstleApp.onAppAudio((chunk) => {
+      let b = chunk;
+      if (rest.length) { b = new Uint8Array(rest.length + chunk.length); b.set(rest); b.set(chunk, rest.length); }
+      const whole = b.length - (b.length % 4);                 // un frame = 2 canali × 2 byte
+      rest = b.slice(whole);
+      if (!whole) return;
+      const i16 = new Int16Array(b.buffer.slice(b.byteOffset, b.byteOffset + whole));
+      const f32 = new Float32Array(i16.length);
+      for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
+      node.port.postMessage(f32, [f32.buffer]);
+    });
+    appAudio = { ctx, node };
+    return dest.stream.getAudioTracks()[0] || null;
+  } catch (e) { console.warn('audio app', e); closeAppAudio(); return null; }
+}
+function closeAppAudio() {
+  if (window.hstleApp) hstleApp.onAppAudio(null);
+  if (appAudio) { try { appAudio.ctx.close(); } catch {} appAudio = null; }
+}
+function stopAppAudio() {
+  closeAppAudio();
+  if (window.hstleApp) hstleApp.stopAppAudio().catch(() => {});
 }
 
 /* ---------- connessioni WebRTC ---------- */
