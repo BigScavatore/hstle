@@ -200,7 +200,8 @@ function avUrl(id, v) {
   return avCache.get(k);
 }
 function paintAvatar(node, uid, name, ver, accent) {
-  node.style.background = accent || accentOf(uid);
+  node.style.backgroundColor = accent || accentOf(uid);
+  node.style.backgroundImage = '';
   node.textContent = (name || '?').trim().slice(0, 1);
   if (ver > 0) {
     avUrl(uid, ver).then((u) => {
