@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0c0915">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <title>Hstle</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/app.css">
@@ -191,6 +196,22 @@
       <p>Hai effettuato l'accesso come <b id="acctName"></b>.</p>
       <div class="row"><button type="button" class="btn danger" id="logoutBtn">Esci dall'account</button></div>
     </div>
+  </div>
+</dialog>
+
+<!-- ============ ritaglio dell'immagine del profilo ============ -->
+<dialog id="cropDlg" class="small">
+  <div class="dhead"><h2>Scegli la parte da usare</h2>
+    <button type="button" class="ib" id="cropClose" title="Chiudi" aria-label="Chiudi" data-icon="x"></button></div>
+  <div class="dbody">
+    <div id="cropBox"><canvas id="cropCv" width="320" height="320" tabindex="0" aria-label="Anteprima: trascina per spostare, rotella o cursore per ingrandire"></canvas></div>
+    <label class="fld"><span>Zoom</span><input type="range" id="cropZoom" min="100" max="400" value="100"></label>
+    <p class="muted" id="cropHint">Trascina l'immagine per spostarla. La parte dentro il cerchio sarà il tuo profilo.</p>
+    <div class="row crop-actions">
+      <button type="button" class="btn ghost" id="cropCancel">Annulla</button>
+      <button type="button" class="btn" id="cropOk">Usa questa immagine</button>
+    </div>
+    <div id="cropErr" class="err" role="alert"></div>
   </div>
 </dialog>
 
