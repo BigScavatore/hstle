@@ -4,9 +4,22 @@ const { app, BrowserWindow, Menu, session, desktopCapturer, ipcMain, shell } = r
 const fs = require('fs');
 const path = require('path');
 
+/* Audio di una sola app (solo Windows): il pacchetto application-loopback lancia due piccoli programmi
+   (ProcessList.exe e ApplicationLoopback.exe) che leggono l'audio del processo scelto. Se manca, resta
+   solo l'opzione "tutto l'audio del computer". */
+let loopback = null;
+if (process.platform === 'win32') {
+  try {
+    loopback = require('application-loopback');
+    loopback.setExecutablesRoot(path.join(__dirname.replace('app.asar', 'app.asar.unpacked'), 'node_modules', 'application-loopback', 'bin'));
+  } catch (e) { console.warn('audio per app non disponibile:', e.message); loopback = null; }
+}
+
 const DEFAULT_URL = 'https://giuseppefausto.ddns.net:8444';
 let win = null, picker = null, serverWin = null;
 let pickerDone = null;
+let pickerPids = new Map();   // id sorgente -> pid del programma che possiede la finestra
+let capturePid = null;
 
 const cfgFile = () => path.join(app.getPath('userData'), 'config.json');
 function cleanUrl(s) {
@@ -47,7 +60,7 @@ function createWindow() {
     width: 1280, height: 800, minWidth: 380, minHeight: 500,
     backgroundColor: '#08050f', title: 'Hstle', autoHideMenuBar: true,
     icon: path.join(__dirname, 'icon.png'),
-    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
+    webPreferences: { preload: path.join(__dirname, 'preload-app.js'), contextIsolation: true, sandbox: true, nodeIntegration: false },
   });
   const url = serverUrl();
   win.loadURL(url);
@@ -82,7 +95,9 @@ function setupPermissions() {
     const video = sources.find((s) => s.id === choice.id);
     if (!video) return callback({});
     const res = { video };
-    if (choice.audio && process.platform === 'win32') res.audio = 'loopback';
+    stopAppCapture();
+    if (choice.audio === 'system' && process.platform === 'win32') res.audio = 'loopback';
+    else if (choice.audio === 'app') startAppCapture(pickerPids.get(choice.id));   // l'audio arriva alla pagina da un altro percorso
     callback(res);
   }, { useSystemPicker: false });
 }
@@ -103,19 +118,55 @@ function openPicker() {
     picker.on('closed', () => { picker = null; pickerDone(null); });
   });
 }
+/** Trova il programma a cui appartiene una finestra (per catturare solo il suo audio). */
+async function pidForWindow(source, wins) {
+  const m = /^window:(\d+):/.exec(source.id);
+  const hw = m ? Number(m[1]) : NaN;
+  const hit = wins.find((x) => { const h = String(x.hwnd).trim(); return parseInt(h, 10) === hw || parseInt(h.replace(/^0x/i, ''), 16) === hw; })
+    || wins.find((x) => x.title && x.title === source.name);
+  return hit ? String(hit.processId) : null;
+}
 ipcMain.handle('picker:sources', async (e) => {
   if (!picker || e.sender !== picker.webContents) return [];
   const list = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 320, height: 180 }, fetchWindowIcons: false });
-  return list.map((s) => ({ id: s.id, name: s.name, thumb: s.thumbnail.toDataURL(), screen: s.id.startsWith('screen:') }));
+  let wins = [];
+  if (loopback) { try { wins = await loopback.getActiveWindowProcessIds(); } catch {} }
+  pickerPids = new Map();
+  const out = [];
+  for (const s of list) {
+    const screen = s.id.startsWith('screen:');
+    const pid = !screen && wins.length ? await pidForWindow(s, wins) : null;
+    if (pid && Number(pid) !== process.pid) pickerPids.set(s.id, pid);
+    out.push({ id: s.id, name: s.name, thumb: s.thumbnail.toDataURL(), screen, app: pickerPids.has(s.id) });
+  }
+  return out;
 });
 ipcMain.handle('picker:audio', () => process.platform === 'win32');
 ipcMain.on('picker:choose', (e, choice) => {
   if (!picker || e.sender !== picker.webContents) return;
   const done = pickerDone;
   pickerDone = null;
-  if (done) done(choice && typeof choice.id === 'string' ? { id: choice.id, audio: !!choice.audio } : null);
+  if (done) done(choice && typeof choice.id === 'string' ? { id: choice.id, audio: ['app', 'system', 'none'].includes(choice.audio) ? choice.audio : 'none' } : null);
   picker.close();
 });
+
+/* ---------- audio di una sola app: dal programma alla pagina ---------- */
+function startAppCapture(pid) {
+  if (!loopback || !pid) return false;
+  try {
+    loopback.startAudioCapture(pid, { onData: (chunk) => { if (win && !win.isDestroyed()) win.webContents.send('app-audio', chunk); } });
+    capturePid = pid;
+    return true;
+  } catch (e) { console.warn('cattura audio:', e.message); capturePid = null; return false; }
+}
+function stopAppCapture() {
+  if (loopback && capturePid) { try { loopback.stopAudioCapture(capturePid); } catch {} }
+  capturePid = null;
+}
+const fromMainWindow = (e) => win && e.sender === win.webContents && isOurs(e.senderFrame ? e.senderFrame.url : '');
+ipcMain.handle('app-audio:active', (e) => fromMainWindow(e) && !!capturePid);
+ipcMain.handle('app-audio:stop', (e) => { if (fromMainWindow(e)) stopAppCapture(); });
+app.on('before-quit', stopAppCapture);
 
 /* ---------- cambiare server ---------- */
 function openServerDialog() {

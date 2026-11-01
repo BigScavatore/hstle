@@ -10,7 +10,7 @@
   img{width:100%;aspect-ratio:16/9;object-fit:contain;background:#000;border-radius:8px;display:block}
   .nm{margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   footer{display:flex;gap:12px;align-items:center;padding:12px 18px;border-top:1px solid #2b1f44}
-  label{flex:1;display:flex;gap:8px;align-items:center;color:#cfc7e6} input{accent-color:#8b5cf6;width:16px;height:16px}
+  label{flex:1;display:flex;gap:8px;align-items:center;color:#cfc7e6} select{background:#08050f;color:inherit;border:1px solid #2b1f44;border-radius:8px;padding:7px 10px;font:inherit;min-width:0;flex:1}
   .btn{border:0;border-radius:10px;padding:9px 18px;font:inherit;font-weight:600;cursor:pointer;color:#fff;background:#8b5cf6} .btn.g{background:#231836} .btn:disabled{opacity:.45;cursor:default}
   h2{grid-column:1/-1;font-size:12px;color:#8d82aa;margin:8px 0 0}
 </style></head><body>
@@ -18,25 +18,36 @@
 <p class="sub">Uno schermo intero o una singola finestra.</p>
 <div id="grid"></div>
 <footer>
-  <label id="audioRow"><input type="checkbox" id="audio" checked>Condividi anche l'audio del computer</label>
+  <label id="audioRow">Audio&nbsp;<select id="audio"></select></label>
   <button class="btn g" id="cancel">Annulla</button>
   <button class="btn" id="ok" disabled>Condividi</button>
 </footer>
 <script>
-let sel = null;
+let sel = null, canAudio = false, byId = new Map();
 const grid = document.getElementById('grid');
 function card(s) {
   const b = document.createElement('button'); b.className = 'card'; b.type = 'button';
   const i = document.createElement('img'); i.src = s.thumb; i.alt = '';
   const n = document.createElement('div'); n.className = 'nm'; n.textContent = s.name; n.title = s.name;
   b.append(i, n);
-  b.onclick = () => { sel = s.id; document.querySelectorAll('.card').forEach((c) => c.classList.toggle('on', c === b)); document.getElementById('ok').disabled = false; };
+  b.onclick = () => { sel = s.id; fillAudio(s); document.querySelectorAll('.card').forEach((c) => c.classList.toggle('on', c === b)); document.getElementById('ok').disabled = false; };
   b.ondblclick = () => { b.onclick(); go(); };
   return b;
 }
-function go() { if (sel) hstleDesktop.choose({ id: sel, audio: document.getElementById('audio').checked }); }
+function fillAudio(s) {
+  const a = document.getElementById('audio');
+  a.replaceChildren();
+  const add = (v, t) => { const o = document.createElement('option'); o.value = v; o.textContent = t; a.append(o); };
+  if (canAudio) {
+    if (s.app) add('app', 'Solo l\'audio di questa app');
+    add('system', s.app ? 'Tutto l\'audio del computer' : 'Tutto l\'audio del computer (si sentirà anche la chiamata)');
+  }
+  add('none', 'Nessun audio');
+}
+function go() { if (sel) hstleDesktop.choose({ id: sel, audio: document.getElementById('audio').value }); }
 (async () => {
-  document.getElementById('audioRow').hidden = !(await hstleDesktop.canShareAudio());
+  canAudio = await hstleDesktop.canShareAudio();
+  fillAudio({ app: false });
   const list = await hstleDesktop.sources();
   for (const [title, f] of [['Schermi', (s) => s.screen], ['Finestre', (s) => !s.screen]]) {
     const part = list.filter(f); if (!part.length) continue;

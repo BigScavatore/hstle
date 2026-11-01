@@ -169,6 +169,11 @@ npm start            # prova
 npm run dist         # crea dist/Hstle-0.1.0-win.zip
 ```
 
+Alla condivisione, per una **finestra** puoi scegliere "Solo l'audio di questa app" (usa il pacchetto
+[`application-loopback`](https://github.com/WerdoxDev/application-loopback), che include due piccoli
+programmi Windows, `ProcessList.exe` e `ApplicationLoopback.exe`, a cura del suo autore); per uno
+schermo intero resta "Tutto l'audio del computer", che include anche la chiamata (meglio con le cuffie).
+
 Lo zip si estrae dove si vuole e si avvia con `Hstle.exe` (non è firmato: Windows può mostrare
 l'avviso di SmartScreen, "Ulteriori informazioni → Esegui comunque").
 

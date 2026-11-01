@@ -15,8 +15,30 @@
   "build": {
     "appId": "it.hstle.desktop",
     "productName": "Hstle",
-    "files": ["main.js", "preload.js", "picker.html", "server.html", "icon.png", "package.json"],
-    "win": { "target": ["zip"], "icon": "icon.png", "signAndEditExecutable": false },
-    "directories": { "output": "dist" }
+    "files": [
+      "main.js",
+      "preload.js",
+      "preload-app.js",
+      "picker.html",
+      "server.html",
+      "icon.png",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "zip"
+      ],
+      "icon": "icon.png",
+      "signAndEditExecutable": false
+    },
+    "directories": {
+      "output": "dist"
+    },
+    "asarUnpack": [
+      "node_modules/application-loopback/bin/**"
+    ]
+  },
+  "dependencies": {
+    "application-loopback": "^1.2.7"
   }
 }
