@@ -517,7 +517,13 @@ $('form').onsubmit = (e) => {
 };
 
 /* ---------- vista: canali, DM, stanza vocale ---------- */
-function closeNav() { document.body.classList.remove('nav-open'); }
+function closeNav() {
+  document.body.classList.remove('nav-open');
+  if (window.innerWidth <= 1100 && $('app').classList.contains('members')) {        // l'elenco dei membri qui è sopra la chat: si chiude da solo
+    $('app').classList.remove('members');
+    document.body.classList.remove('mem-open');
+  }
+}
 
 function selectChannel(id) {
   tv = 'chan';
@@ -943,6 +949,7 @@ let draft = { name: '', bio: '', accent: ACCENTS[0] };
 let ns = lsGet('hstle-ns') !== '0';       // riduzione del rumore: acceso di default
 
 function openSettings(tab) {
+  closeNav();
   const m = me && members.get(me.id);
   draft = { name: (m && m.display_name) || '', bio: (m && m.bio) || '', accent: (m && safeColor(m.accent)) || accentOf(me.id) };
   $('pfName').value = draft.name;
@@ -1015,32 +1022,129 @@ $('pfFile').onchange = async (e) => {
   const f = e.target.files[0];
   e.target.value = '';
   if (!f) return;
-  try {
-    const blob = await squareImage(f, 256);
-    const r = await fetch('/api/avatar', { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: blob });
-    if (!r.ok) { let d = {}; try { d = await r.json(); } catch {} throw new Error(d.error || 'errore ' + r.status); }
-    toast('Immagine aggiornata.');
-  } catch (err) {
-    $('pfErr').textContent = err.message || 'Immagine non valida.';
-  }
+  $('pfErr').textContent = '';
+  try { await openCrop(f); } catch (err) { $('pfErr').textContent = err.message || 'Immagine non valida.'; }
 };
 $('pfRemove').onclick = async () => {
   try { await api('/api/avatar/clear', null, true); toast('Immagine rimossa.'); } catch (err) { $('pfErr').textContent = err.message; }
 };
 
-/** Ritaglia al centro e riduce a size×size: l'immagine pesa poche decine di KB. */
-async function squareImage(file, size) {
-  const bmp = await createImageBitmap(file);
-  const c = document.createElement('canvas');
-  c.width = c.height = size;
-  const g = c.getContext('2d');
-  g.fillStyle = '#1a1229';
-  g.fillRect(0, 0, size, size);
-  const s = Math.min(bmp.width, bmp.height);
-  g.drawImage(bmp, (bmp.width - s) / 2, (bmp.height - s) / 2, s, s, 0, 0, size, size);
-  bmp.close && bmp.close();
-  return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('Immagine non valida.'))), 'image/jpeg', 0.88));
+/* ---------- ritaglio dell'immagine del profilo ----------
+   Si trascina l'immagine e si ingrandisce; la parte dentro il cerchio viene ridotta a 256×256 e caricata. */
+const crop = { bmp: null, cx: 0, cy: 0, z: 1, base: 1, drag: null, pts: new Map(), pinch: 0 };
+const CV = 320, CD = 264;            // lato della tela e diametro del cerchio, in pixel
+const cropDlg = $('cropDlg'), cv = $('cropCv');
+const cscale = () => crop.base * crop.z;
+
+function cropClamp() {
+  const b = crop.bmp, half = CD / 2 / cscale();
+  crop.cx = Math.min(Math.max(crop.cx, half), b.width - half);
+  crop.cy = Math.min(Math.max(crop.cy, half), b.height - half);
 }
+function cropDraw() {
+  const g = cv.getContext('2d'), b = crop.bmp, sc = cscale();
+  g.fillStyle = '#08050f';
+  g.fillRect(0, 0, CV, CV);
+  if (!b) return;
+  g.save();
+  g.translate(CV / 2, CV / 2);
+  g.scale(sc, sc);
+  g.translate(-crop.cx, -crop.cy);
+  g.drawImage(b, 0, 0);
+  g.restore();
+  g.fillStyle = 'rgba(8, 5, 15, .68)';                  // fuori dal cerchio: scurito
+  g.beginPath();
+  g.rect(0, 0, CV, CV);
+  g.arc(CV / 2, CV / 2, CD / 2, 0, Math.PI * 2, true);
+  g.fill('evenodd');
+  g.strokeStyle = 'rgba(167, 139, 250, .9)';
+  g.lineWidth = 2;
+  g.beginPath();
+  g.arc(CV / 2, CV / 2, CD / 2, 0, Math.PI * 2);
+  g.stroke();
+}
+function cropSetZoom(z, keepFocus) {
+  crop.z = Math.min(4, Math.max(1, z));
+  $('cropZoom').value = String(Math.round(crop.z * 100));
+  cropClamp();
+  cropDraw();
+}
+async function openCrop(file) {
+  if (crop.bmp && crop.bmp.close) crop.bmp.close();
+  let bmp;
+  try { bmp = await createImageBitmap(file); } catch { throw new Error('Non riesco a leggere questa immagine.'); }
+  crop.bmp = bmp;
+  crop.base = CD / Math.min(bmp.width, bmp.height);     // all'inizio l'immagine copre tutto il cerchio
+  crop.cx = bmp.width / 2;
+  crop.cy = bmp.height / 2;
+  $('cropErr').textContent = '';
+  $('cropOk').disabled = false;
+  cropSetZoom(1);
+  if (!cropDlg.open) cropDlg.showModal();
+  cv.focus({ preventScroll: true });
+}
+cv.style.touchAction = 'none';
+cv.addEventListener('pointerdown', (e) => {
+  try { cv.setPointerCapture(e.pointerId); } catch {}
+  crop.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (crop.pts.size === 2) { const [p, q] = [...crop.pts.values()]; crop.pinch = Math.hypot(p.x - q.x, p.y - q.y); }
+});
+cv.addEventListener('pointermove', (e) => {
+  const p = crop.pts.get(e.pointerId);
+  if (!p) return;
+  const k = cv.getBoundingClientRect().width / CV;      // la tela può essere mostrata più piccola di 320 px
+  if (crop.pts.size === 2) {                            // pizzico con due dita: zoom
+    crop.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const [a, b] = [...crop.pts.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    if (crop.pinch) cropSetZoom(crop.z * d / crop.pinch);
+    crop.pinch = d;
+    return;
+  }
+  crop.cx -= (e.clientX - p.x) / k / cscale();
+  crop.cy -= (e.clientY - p.y) / k / cscale();
+  crop.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  cropClamp();
+  cropDraw();
+});
+const cropUp = (e) => { crop.pts.delete(e.pointerId); crop.pinch = 0; };
+cv.addEventListener('pointerup', cropUp);
+cv.addEventListener('pointercancel', cropUp);
+cv.addEventListener('wheel', (e) => { e.preventDefault(); cropSetZoom(crop.z * (e.deltaY < 0 ? 1.08 : 1 / 1.08)); }, { passive: false });
+cv.addEventListener('keydown', (e) => {
+  const step = 12 / cscale();
+  const mv = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+  if (mv) { e.preventDefault(); crop.cx += mv[0]; crop.cy += mv[1]; cropClamp(); cropDraw(); }
+  else if (e.key === '+' || e.key === '=') cropSetZoom(crop.z * 1.1);
+  else if (e.key === '-') cropSetZoom(crop.z / 1.1);
+});
+$('cropZoom').oninput = (e) => cropSetZoom(Number(e.target.value) / 100);
+$('cropClose').onclick = $('cropCancel').onclick = () => cropDlg.close();
+cropDlg.onclick = (e) => { if (e.target === cropDlg) cropDlg.close(); };
+cropDlg.addEventListener('close', () => { if (crop.bmp && crop.bmp.close) crop.bmp.close(); crop.bmp = null; crop.pts.clear(); });
+
+$('cropOk').onclick = async () => {
+  const b = crop.bmp;
+  if (!b) return;
+  $('cropOk').disabled = true;
+  try {
+    const sc = cscale(), side = CD / sc;
+    const out = document.createElement('canvas');
+    out.width = out.height = 256;
+    const g = out.getContext('2d');
+    g.fillStyle = '#1a1229';
+    g.fillRect(0, 0, 256, 256);
+    g.drawImage(b, crop.cx - side / 2, crop.cy - side / 2, side, side, 0, 0, 256, 256);
+    const blob = await new Promise((res, rej) => out.toBlob((x) => (x ? res(x) : rej(new Error('Immagine non valida.'))), 'image/jpeg', 0.9));
+    const r = await fetch('/api/avatar', { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: blob });
+    if (!r.ok) { let d = {}; try { d = await r.json(); } catch {} throw new Error(d.error || 'errore ' + r.status); }
+    cropDlg.close();
+    toast('Immagine aggiornata.');
+  } catch (err) {
+    $('cropErr').textContent = err.message || 'Caricamento non riuscito.';
+    $('cropOk').disabled = false;
+  }
+};
 
 $('logoutBtn').onclick = async () => {
   try { await api('/api/logout', null, true); } catch {}

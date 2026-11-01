@@ -18,7 +18,8 @@ Pensata per pochi utenti e server con poca RAM.
 - Profilo: nome visualizzato, presentazione, colore e immagine (ridimensionata dal browser, max 128 KB)
 - Messaggi privati con non letti, modifica ed eliminazione dei propri; chi è online
 - Cuffie (disattiva l'audio, e il microfono con esso), volume per ogni persona (0–200%, solo per te) e riduzione del rumore attivabile
-- Interfaccia viola e nera, anche da telefono
+- Immagine del profilo con ritaglio: si sceglie la parte da usare (trascinamento, zoom, pizzico sul telefono)
+- Interfaccia viola e nera, anche da telefono; si può installare come app (PWA: "Aggiungi a schermata Home")
 
 ## Avvio
 

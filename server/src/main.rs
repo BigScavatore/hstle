@@ -88,6 +88,9 @@ async fn main() {
         .route("/app.css", get(app_css))
         .route("/app.js", get(app_js))
         .route("/favicon.svg", get(favicon))
+        .route("/manifest.webmanifest", get(manifest))
+        .route("/icon-192.png", get(icon192))
+        .route("/icon-512.png", get(icon512))
         .route("/api/avatar", post(profile::set_avatar))
         .route("/api/avatar/clear", post(profile::clear_avatar))
         .route("/api/avatar/{id}", get(profile::get_avatar))
@@ -139,5 +142,36 @@ async fn favicon() -> impl IntoResponse {
             (header::CACHE_CONTROL, "public, max-age=86400"),
         ],
         include_str!("../static/favicon.svg"),
+    )
+}
+
+/// Per installare Hstle come app dal telefono (o da Chrome/Edge sul computer).
+async fn manifest() -> impl IntoResponse {
+    (
+        [
+            (header::CONTENT_TYPE, "application/manifest+json"),
+            (header::CACHE_CONTROL, "no-cache"),
+        ],
+        include_str!("../static/manifest.webmanifest"),
+    )
+}
+
+async fn icon192() -> impl IntoResponse {
+    (
+        [
+            (header::CONTENT_TYPE, "image/png"),
+            (header::CACHE_CONTROL, "public, max-age=86400"),
+        ],
+        include_bytes!("../static/icon-192.png").as_slice(),
+    )
+}
+
+async fn icon512() -> impl IntoResponse {
+    (
+        [
+            (header::CONTENT_TYPE, "image/png"),
+            (header::CACHE_CONTROL, "public, max-age=86400"),
+        ],
+        include_bytes!("../static/icon-512.png").as_slice(),
     )
 }
