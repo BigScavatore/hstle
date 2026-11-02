@@ -156,27 +156,15 @@ da un altro dispositivo, la prima connessione viene espulsa dal canale.
 | `POST /api/avatar/clear` | toglie la propria immagine |
 | `GET /api/avatar/{id}` | immagine di un utente; serve il token (non è pubblica) |
 
-## App desktop per Windows
+## App desktop
 
-Nella cartella `desktop/` c'è un'app Electron che apre il client del tuo server in una finestra
-Chromium. Serve soprattutto a condividere lo schermo **con l'audio del computer**, cosa che
-Firefox non permette. Ha un selettore proprio (schermi e finestre con anteprima) e l'indirizzo
-del server si cambia dal menu *Hstle → Cambia server*.
+L'app desktop (Windows, macOS, Linux) sta in una repository a parte:
+**[BigScavatore/hstle-desktop](https://github.com/BigScavatore/hstle-desktop)**. Apre il client del tuo
+server in una finestra e permette di condividere lo schermo **con l'audio del computer** (e, su Windows,
+con l'audio di un solo programma), cosa che Firefox non permette.
 
-```bash
-cd desktop
-npm install
-npm start            # prova
-npm run dist         # crea dist/Hstle-0.1.0-win.zip
-```
-
-Alla condivisione, per una **finestra** puoi scegliere "Solo l'audio di questa app" (usa il pacchetto
-[`application-loopback`](https://github.com/WerdoxDev/application-loopback), che include due piccoli
-programmi Windows, `ProcessList.exe` e `ApplicationLoopback.exe`, a cura del suo autore); per uno
-schermo intero resta "Tutto l'audio del computer", che include anche la chiamata (meglio con le cuffie).
-
-Lo zip si estrae dove si vuole e si avvia con `Hstle.exe` (non è firmato: Windows può mostrare
-l'avviso di SmartScreen, "Ulteriori informazioni → Esegui comunque").
+Per scaricarla vai su [Releases](https://github.com/BigScavatore/hstle-desktop/releases/latest): nel README
+della repository trovi quale file scegliere per ogni sistema e come avviarlo.
 
 ## Build per il server
 
@@ -204,3 +192,4 @@ Il binario risultante è in `server/target/release/`.
 - Su telefono lo schermo resta acceso durante la chiamata (Wake Lock).
 - **Condivisione schermo**: modalità *Fluidità* (30 fps, fino a 3,5 Mbit/s, per giochi e video) o *Nitidezza* (testo e programmi). Si cambia anche mentre si condivide.
 - **App desktop**: disattivato il rallentamento in background, così la cattura non si ferma quando un gioco copre la finestra di Hstle.
+- **Schermo intero con l'audio di un solo programma** (app desktop, Windows): scegliendo uno schermo, il menu Audio elenca i programmi con una finestra aperta ("Solo l'audio di: ..."). Così si condivide tutto lo schermo (meglio per i giochi) senza far risentire le voci della chiamata.
