@@ -25,6 +25,7 @@ if (process.platform === 'win32') {
 const DEFAULT_URL = 'https://giuseppefausto.ddns.net:8444';
 let win = null, picker = null, serverWin = null;
 let pickerDone = null;
+let pickerApps = new Map();
 let pickerPids = new Map();   // id sorgente -> pid del programma che possiede la finestra
 let capturePid = null;
 
@@ -104,7 +105,7 @@ function setupPermissions() {
     const res = { video };
     stopAppCapture();
     if (choice.audio === 'system' && process.platform === 'win32') res.audio = 'loopback';
-    else if (choice.audio === 'app') startAppCapture(pickerPids.get(choice.id));   // l'audio arriva alla pagina da un altro percorso
+    else if (choice.audio === 'app') startAppCapture(choice.pid || pickerPids.get(choice.id));   // l'audio arriva alla pagina da un altro percorso
     callback(res);
   }, { useSystemPicker: false });
 }
@@ -146,14 +147,25 @@ ipcMain.handle('picker:sources', async (e) => {
     if (pid && Number(pid) !== process.pid) pickerPids.set(s.id, pid);
     out.push({ id: s.id, name: s.name, thumb: s.thumbnail.toDataURL(), screen, app: pickerPids.has(s.id) });
   }
-  return out;
+  // programmi con una finestra aperta: per lo schermo intero si può scegliere l'audio di uno solo (es. il gioco)
+  pickerApps = new Map();
+  for (const w of wins) {
+    const pid = String(w.processId);
+    if (Number(pid) === process.pid || !w.title || pickerApps.has(pid)) continue;
+    pickerApps.set(pid, String(w.title).slice(0, 80));
+  }
+  return { sources: out, apps: [...pickerApps].map(([pid, title]) => ({ pid, title })) };
 });
 ipcMain.handle('picker:audio', () => process.platform === 'win32');
 ipcMain.on('picker:choose', (e, choice) => {
   if (!picker || e.sender !== picker.webContents) return;
   const done = pickerDone;
   pickerDone = null;
-  if (done) done(choice && typeof choice.id === 'string' ? { id: choice.id, audio: ['app', 'system', 'none'].includes(choice.audio) ? choice.audio : 'none' } : null);
+  if (done) done(choice && typeof choice.id === 'string' ? {
+    id: choice.id,
+    audio: ['app', 'system', 'none'].includes(choice.audio) ? choice.audio : 'none',
+    pid: typeof choice.pid === 'string' && pickerApps.has(choice.pid) ? choice.pid : null,   // solo programmi dell'elenco mostrato
+  } : null);
   picker.close();
 });
 

@@ -204,3 +204,4 @@ Il binario risultante è in `server/target/release/`.
 - Su telefono lo schermo resta acceso durante la chiamata (Wake Lock).
 - **Condivisione schermo**: modalità *Fluidità* (30 fps, fino a 3,5 Mbit/s, per giochi e video) o *Nitidezza* (testo e programmi). Si cambia anche mentre si condivide.
 - **App desktop**: disattivato il rallentamento in background, così la cattura non si ferma quando un gioco copre la finestra di Hstle.
+- **Schermo intero con l'audio di un solo programma** (app desktop, Windows): scegliendo uno schermo, il menu Audio elenca i programmi con una finestra aperta ("Solo l'audio di: ..."). Così si condivide tutto lo schermo (meglio per i giochi) senza far risentire le voci della chiamata.

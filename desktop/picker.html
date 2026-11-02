@@ -15,7 +15,7 @@
   h2{grid-column:1/-1;font-size:12px;color:#8d82aa;margin:8px 0 0}
 </style></head><body>
 <h1>Cosa vuoi condividere?</h1>
-<p class="sub">Uno schermo intero o una singola finestra. Per i giochi scegli lo schermo intero: la finestra del gioco può restare nera o fermarsi.</p>
+<p class="sub">Uno schermo intero o una singola finestra. Per i giochi scegli lo schermo intero e, in basso, l'audio del solo gioco: così la chiamata non si risente.</p>
 <div id="grid"></div>
 <footer>
   <label id="audioRow">Audio&nbsp;<select id="audio"></select></label>
@@ -23,7 +23,7 @@
   <button class="btn" id="ok" disabled>Condividi</button>
 </footer>
 <script>
-let sel = null, canAudio = false, byId = new Map();
+let sel = null, canAudio = false, apps = [], byId = new Map();
 const grid = document.getElementById('grid');
 function card(s) {
   const b = document.createElement('button'); b.className = 'card'; b.type = 'button';
@@ -40,15 +40,21 @@ function fillAudio(s) {
   const add = (v, t) => { const o = document.createElement('option'); o.value = v; o.textContent = t; a.append(o); };
   if (canAudio) {
     if (s.app) add('app', 'Solo l\'audio di questa app');
-    add('system', s.app ? 'Tutto l\'audio del computer' : 'Tutto l\'audio del computer (si sentirà anche la chiamata)');
+    else if (s.screen) apps.forEach((x) => add('app:' + x.pid, 'Solo l\'audio di: ' + x.title));
+    add('system', 'Tutto l\'audio del computer (si sentirà anche la chiamata)');
   }
   add('none', 'Nessun audio');
 }
-function go() { if (sel) hstleDesktop.choose({ id: sel, audio: document.getElementById('audio').value }); }
+function go() {
+  if (!sel) return;
+  const v = document.getElementById('audio').value;
+  hstleDesktop.choose(v.startsWith('app:') ? { id: sel, audio: 'app', pid: v.slice(4) } : { id: sel, audio: v });
+}
 (async () => {
   canAudio = await hstleDesktop.canShareAudio();
   fillAudio({ app: false });
-  const list = await hstleDesktop.sources();
+  const r = await hstleDesktop.sources();
+  const list = r.sources; apps = r.apps;
   for (const [title, f] of [['Schermi', (s) => s.screen], ['Finestre', (s) => !s.screen]]) {
     const part = list.filter(f); if (!part.length) continue;
     const h = document.createElement('h2'); h.textContent = title; grid.append(h);
