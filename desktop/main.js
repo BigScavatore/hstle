@@ -4,6 +4,13 @@ const { app, BrowserWindow, Menu, session, desktopCapturer, ipcMain, shell } = r
 const fs = require('fs');
 const path = require('path');
 
+// Con un gioco a schermo intero la finestra di Hstle resta coperta: Chromium la considera "nascosta" e rallenta
+// o ferma cattura e invio del video. Questi interruttori lo impediscono.
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+
 /* Audio di una sola app (solo Windows): il pacchetto application-loopback lancia due piccoli programmi
    (ProcessList.exe e ApplicationLoopback.exe) che leggono l'audio del processo scelto. Se manca, resta
    solo l'opzione "tutto l'audio del computer". */
@@ -60,7 +67,7 @@ function createWindow() {
     width: 1280, height: 800, minWidth: 380, minHeight: 500,
     backgroundColor: '#08050f', title: 'Hstle', autoHideMenuBar: true,
     icon: path.join(__dirname, 'icon.png'),
-    webPreferences: { preload: path.join(__dirname, 'preload-app.js'), contextIsolation: true, sandbox: true, nodeIntegration: false },
+    webPreferences: { preload: path.join(__dirname, 'preload-app.js'), backgroundThrottling: false, contextIsolation: true, sandbox: true, nodeIntegration: false },
   });
   const url = serverUrl();
   win.loadURL(url);

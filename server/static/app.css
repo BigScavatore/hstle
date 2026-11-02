@@ -378,3 +378,14 @@ button, .row-item, .mem, .rb, .ib { touch-action: manipulation; -webkit-tap-high
   #vbar { padding-top: 6px; padding-bottom: 8px; }
   .rb { width: 42px; height: 42px; }
 }
+
+/* ---------- scelta dei dispositivi ---------- */
+.devbox { display: flex; flex-direction: column; gap: 14px; }
+select {
+  font: inherit; color: var(--text); background: var(--bg1); border: 1px solid var(--line);
+  border-radius: 10px; padding: 10px 12px; width: 100%; min-height: 42px; text-overflow: ellipsis;
+}
+select:focus { outline: none; border-color: var(--violet); box-shadow: 0 0 0 3px var(--glow); }
+.meter { height: 6px; border-radius: 99px; background: var(--bg4); overflow: hidden; }
+.meter > i { display: block; height: 100%; width: 0; background: var(--violet); transition: width .08s linear; }
+#devStatus.bad { color: var(--danger); }
