@@ -389,3 +389,28 @@ select:focus { outline: none; border-color: var(--violet); box-shadow: 0 0 0 3px
 .meter { height: 6px; border-radius: 99px; background: var(--bg4); overflow: hidden; }
 .meter > i { display: block; height: 100%; width: 0; background: var(--violet); transition: width .08s linear; }
 #devStatus.bad { color: var(--danger); }
+
+/* ---------- allegati ---------- */
+#attBtn { align-self: flex-end; height: 44px; width: 40px; }
+#attBar { position: relative; display: flex; align-items: center; gap: 10px; margin: 0 16px 8px; padding: 8px 12px; background: var(--bg3); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+#attBar[hidden] { display: none; }
+#attBar .att-ico { color: var(--violet-hi); display: grid; }
+#attBar .att-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#attBar b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+#attBar small { color: var(--muted); font-size: 12.5px; }
+#attBar.bad { border-color: rgba(242, 80, 110, .5); }
+#attBar.bad small { color: #ffb3c1; }
+.att-bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: var(--violet); transition: width .15s; }
+#main.drop::after { content: 'Rilascia il file per allegarlo'; position: absolute; inset: 8px; display: grid; place-items: center; border: 2px dashed var(--violet); border-radius: 16px; background: rgba(13, 9, 22, .85); color: var(--violet-hi); font-weight: 600; z-index: 20; pointer-events: none; }
+#main { position: relative; }
+.att-img { margin-top: 4px; display: inline-block; max-width: min(360px, 100%); border-radius: 12px; overflow: hidden; background: var(--bg3); cursor: zoom-in; vertical-align: top; color: var(--muted); font-size: 13px; }
+.att-img img { display: block; max-width: 100%; max-height: 300px; object-fit: contain; }
+.att-img.bad { padding: 18px 14px; cursor: default; }
+.att-file { margin-top: 4px; display: flex; align-items: center; gap: 12px; max-width: min(380px, 100%); padding: 10px 14px; background: var(--bg3); border: 1px solid var(--line); border-radius: 12px; color: var(--text); text-align: left; }
+.att-file:hover { background: var(--bg4); }
+.att-file:disabled { opacity: .6; }
+.att-file .att-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.att-file b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; }
+.att-file small { color: var(--muted); font-size: 12.5px; }
+.att-file .i { color: var(--violet-hi); flex: none; }
+.att-img:not(.ok) { min-width: 120px; min-height: 60px; }

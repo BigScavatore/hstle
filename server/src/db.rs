@@ -77,6 +77,17 @@ CREATE TABLE IF NOT EXISTS dm_messages (
     created_at INTEGER NOT NULL,
     edited_at  INTEGER
 );
+-- File allegati: il contenuto sta su disco (cartella dei file), qui solo i dati.
+-- `used` = 0 finché non è stato allegato a un messaggio.
+CREATE TABLE IF NOT EXISTS uploads (
+    id         TEXT PRIMARY KEY,
+    user_id    INTEGER NOT NULL,
+    name       TEXT NOT NULL,
+    mime       TEXT NOT NULL,
+    size       INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    used       INTEGER NOT NULL DEFAULT 0
+);
 CREATE INDEX IF NOT EXISTS idx_dm_sender ON dm_messages(sender, recipient, id);
 CREATE INDEX IF NOT EXISTS idx_dm_recipient ON dm_messages(recipient, sender, id);
 -- Fino a quale messaggio privato di `peer_id` l'utente ha già letto.
@@ -126,6 +137,17 @@ pub struct Msg {
     pub ts: i64,
     /// Quando è stato modificato l'ultima volta (None = mai modificato).
     pub edited: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<FileRef>,
+}
+
+/// Allegato di un messaggio.
+#[derive(Serialize, Clone)]
+pub struct FileRef {
+    pub id: String,
+    pub name: String,
+    pub mime: String,
+    pub size: i64,
 }
 
 #[derive(Serialize)]
@@ -169,6 +191,8 @@ pub struct DmMsg {
     pub text: String,
     pub ts: i64,
     pub edited: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<FileRef>,
 }
 
 /// Una conversazione privata: con chi, l'ultimo messaggio e quanti ne mancano da leggere.
@@ -244,6 +268,17 @@ impl Db {
         )?;
         if has_edited == 0 {
             conn.execute("ALTER TABLE messages ADD COLUMN edited_at INTEGER", [])?;
+        }
+        // Allegati: colonna `file_id` nei messaggi dei canali e in quelli privati.
+        for table in ["messages", "dm_messages"] {
+            let present: i64 = conn.query_row(
+                &format!("SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = 'file_id'"),
+                [],
+                |r| r.get(0),
+            )?;
+            if present == 0 {
+                conn.execute(&format!("ALTER TABLE {table} ADD COLUMN file_id TEXT"), [])?;
+            }
         }
         // Profili (nome visualizzato, bio, colore, avatar): colonne aggiunte ai database esistenti.
         let mut cols: Vec<(&str, &str)> = PROFILE_COLUMNS.to_vec();
@@ -672,6 +707,7 @@ impl Db {
         channel: i64,
         user: User,
         text: String,
+        file: Option<String>,
     ) -> Result<Verdict<Msg>, ApiError> {
         self.call(move |c| {
             if !access_in(c, user.id)?.can(perms::SEND_MESSAGES) {
@@ -686,10 +722,14 @@ impl Db {
                 return Ok(Err("il canale non esiste"));
             }
             let ts = now();
+            let att = match take_upload(c, &file, user.id)? {
+                Ok(a) => a,
+                Err(e) => return Ok(Err(e)),
+            };
             c.execute(
-                "INSERT INTO messages(channel_id, user_id, text, created_at)
-                 VALUES (?1, ?2, ?3, ?4)",
-                params![channel, user.id, text, ts],
+                "INSERT INTO messages(channel_id, user_id, text, created_at, file_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![channel, user.id, text, ts, att.as_ref().map(|a| a.id.clone())],
             )?;
             Ok(Ok(Msg {
                 id: c.last_insert_rowid(),
@@ -701,6 +741,7 @@ impl Db {
                 text,
                 ts,
                 edited: None,
+                file: att,
             }))
         })
         .await
@@ -1062,11 +1103,90 @@ impl Db {
         .await
     }
 
+    // ---------- allegati ----------
+
+    /// Spazio occupato dai file caricati (in byte).
+    pub async fn uploads_total(&self) -> Result<i64, ApiError> {
+        self.call(|c| c.query_row("SELECT COALESCE(SUM(size), 0) FROM uploads", [], |r| r.get(0))).await
+    }
+
+    pub async fn upload_add(&self, id: String, user: i64, name: String, mime: String, size: i64) -> Result<(), ApiError> {
+        self.call(move |c| {
+            c.execute(
+                "INSERT INTO uploads(id, user_id, name, mime, size, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![id, user, name, mime, size, now()],
+            )?;
+            Ok(())
+        })
+        .await
+    }
+
+    /// Dati di un file, se `user` può vederlo: i file dei messaggi privati solo ai due
+    /// partecipanti, quelli ancora non allegati solo a chi li ha caricati.
+    pub async fn file_for(&self, id: String, user: i64) -> Result<Option<FileRef>, ApiError> {
+        self.call(move |c| {
+            let row: Option<(String, String, i64, i64, i64)> = c
+                .query_row(
+                    "SELECT name, mime, size, user_id, used FROM uploads WHERE id = ?1",
+                    [&id],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+                )
+                .optional()?;
+            let Some((name, mime, size, owner, used)) = row else { return Ok(None) };
+            let allowed = if used == 0 {
+                owner == user
+            } else {
+                let dm: Option<(i64, i64)> = c
+                    .query_row(
+                        "SELECT sender, recipient FROM dm_messages WHERE file_id = ?1",
+                        [&id],
+                        |r| Ok((r.get(0)?, r.get(1)?)),
+                    )
+                    .optional()?;
+                match dm {
+                    Some((a, b)) => user == a || user == b,
+                    None => true,
+                }
+            };
+            Ok(allowed.then_some(FileRef { id, name, mime, size }))
+        })
+        .await
+    }
+
+    /// Toglie dal database i file mai allegati (da più di un'ora) e quelli dei messaggi
+    /// ormai cancellati. Restituisce gli id, così chi chiama può togliere i file dal disco.
+    pub async fn sweep_uploads(&self) -> Result<Vec<String>, ApiError> {
+        self.call(|c| {
+            let ids: Vec<String> = {
+                let mut st = c.prepare(
+                    "SELECT id FROM uploads
+                     WHERE (used = 0 AND created_at < ?1)
+                        OR (used = 1
+                            AND id NOT IN (SELECT file_id FROM messages WHERE file_id IS NOT NULL)
+                            AND id NOT IN (SELECT file_id FROM dm_messages WHERE file_id IS NOT NULL))",
+                )?;
+                let rows = st.query_map([now() - 3600], |r| r.get(0))?;
+                rows.collect::<rusqlite::Result<_>>()?
+            };
+            for id in &ids {
+                c.execute("DELETE FROM uploads WHERE id = ?1", [id])?;
+            }
+            Ok(ids)
+        })
+        .await
+    }
+
     // ---------- messaggi privati ----------
     //
     // Li vedono solo i due partecipanti: ogni interrogazione parte dall'utente che chiede.
 
-    pub async fn dm_send(&self, from: i64, to: i64, text: String) -> Result<Verdict<DmMsg>, ApiError> {
+    pub async fn dm_send(
+        &self,
+        from: i64,
+        to: i64,
+        text: String,
+        file: Option<String>,
+    ) -> Result<Verdict<DmMsg>, ApiError> {
         self.call(move |c| {
             if from == to {
                 return Ok(Err("non puoi scrivere a te stesso"));
@@ -1080,9 +1200,13 @@ impl Db {
                 return Ok(Err("l'utente non esiste"));
             }
             let ts = now();
+            let att = match take_upload(c, &file, from)? {
+                Ok(a) => a,
+                Err(e) => return Ok(Err(e)),
+            };
             c.execute(
-                "INSERT INTO dm_messages(sender, recipient, text, created_at) VALUES (?1, ?2, ?3, ?4)",
-                params![from, to, text, ts],
+                "INSERT INTO dm_messages(sender, recipient, text, created_at, file_id) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![from, to, text, ts, att.as_ref().map(|a| a.id.clone())],
             )?;
             Ok(Ok(DmMsg {
                 id: c.last_insert_rowid(),
@@ -1091,6 +1215,7 @@ impl Db {
                 text,
                 ts,
                 edited: None,
+                file: att,
             }))
         })
         .await
@@ -1206,8 +1331,10 @@ impl Db {
 
 // ---------- funzioni d'appoggio ----------
 
-const DM_SELECT: &str =
-    "SELECT id, sender, recipient, text, created_at, edited_at FROM dm_messages";
+const DM_SELECT: &str = "SELECT id, sender, recipient, text, created_at, edited_at, file_id,
+     (SELECT name FROM uploads WHERE id = dm_messages.file_id),
+     (SELECT mime FROM uploads WHERE id = dm_messages.file_id),
+     (SELECT size FROM uploads WHERE id = dm_messages.file_id) FROM dm_messages";
 
 fn row_dm(r: &rusqlite::Row<'_>) -> rusqlite::Result<DmMsg> {
     Ok(DmMsg {
@@ -1217,10 +1344,42 @@ fn row_dm(r: &rusqlite::Row<'_>) -> rusqlite::Result<DmMsg> {
         text: r.get(3)?,
         ts: r.get(4)?,
         edited: r.get(5)?,
+        file: file_ref(r, 6)?,
     })
 }
 
-const MSG_SELECT: &str = "SELECT m.id, m.channel_id, u.id, u.username, m.text, m.created_at, m.edited_at
+/// Legge i quattro campi dell'allegato (id, nome, tipo, dimensione) a partire dalla colonna `i`.
+fn file_ref(r: &rusqlite::Row<'_>, i: usize) -> rusqlite::Result<Option<FileRef>> {
+    let id: Option<String> = r.get(i)?;
+    let (name, mime, size): (Option<String>, Option<String>, Option<i64>) =
+        (r.get(i + 1)?, r.get(i + 2)?, r.get(i + 3)?);
+    Ok(match (id, name, mime, size) {
+        (Some(id), Some(name), Some(mime), Some(size)) => Some(FileRef { id, name, mime, size }),
+        _ => None,
+    })
+}
+
+/// Collega un file caricato al messaggio in arrivo: deve essere dell'autore e non ancora usato.
+fn take_upload(c: &Connection, file: &Option<String>, user: i64) -> rusqlite::Result<Verdict<Option<FileRef>>> {
+    let Some(id) = file else { return Ok(Ok(None)) };
+    let row: Option<(String, String, i64)> = c
+        .query_row(
+            "SELECT name, mime, size FROM uploads WHERE id = ?1 AND user_id = ?2 AND used = 0",
+            params![id, user],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .optional()?;
+    let Some((name, mime, size)) = row else {
+        return Ok(Err("allegato non valido o già usato"));
+    };
+    c.execute("UPDATE uploads SET used = 1 WHERE id = ?1", [id])?;
+    Ok(Ok(Some(FileRef { id: id.clone(), name, mime, size })))
+}
+
+const MSG_SELECT: &str = "SELECT m.id, m.channel_id, u.id, u.username, m.text, m.created_at, m.edited_at, m.file_id,
+     (SELECT name FROM uploads WHERE id = m.file_id),
+     (SELECT mime FROM uploads WHERE id = m.file_id),
+     (SELECT size FROM uploads WHERE id = m.file_id)
      FROM messages m JOIN users u ON u.id = m.user_id";
 
 fn row_msg(r: &rusqlite::Row<'_>) -> rusqlite::Result<Msg> {
@@ -1234,6 +1393,7 @@ fn row_msg(r: &rusqlite::Row<'_>) -> rusqlite::Result<Msg> {
         text: r.get(4)?,
         ts: r.get(5)?,
         edited: r.get(6)?,
+        file: file_ref(r, 7)?,
     })
 }
 

@@ -112,7 +112,15 @@
 
     <div id="log" tabindex="-1"></div>
 
+    <div id="attBar" hidden>
+      <span class="att-ico" data-icon="file"></span>
+      <span class="att-info"><b id="attName"></b><small id="attState"></small></span>
+      <button type="button" class="ib sm" id="attClear" title="Togli l'allegato" aria-label="Togli l'allegato" data-icon="x"></button>
+      <i class="att-bar" id="attProg"></i>
+    </div>
     <form id="form">
+      <button type="button" class="ib" id="attBtn" title="Allega un file" aria-label="Allega un file" data-icon="paperclip"></button>
+      <input type="file" id="attFile" hidden>
       <textarea id="text" rows="1" maxlength="2000" autocomplete="off" placeholder="Scrivi un messaggio"></textarea>
       <button class="send" id="sendBtn" title="Invia" aria-label="Invia il messaggio" data-icon="send"></button>
     </form>

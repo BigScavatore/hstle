@@ -35,6 +35,9 @@ const ICON = {
   pin: 'M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z',
   pencil: 'M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z',
   trash: 'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6',
+  paperclip: 'M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48',
+  download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
+  file: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6',
   upload: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12',
   wave: 'M2 12h2M6 8v8M10 4v16M14 8v8M18 6v12M22 12h-2',
   message: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
@@ -347,6 +350,8 @@ function connect() {
 function start() { show('app'); connect(); }
 function endSession() {
   leaveVoice(true);
+  clearAtt();
+  fileCache.clear();
   token = null;
   me = null;
   closeAllDialogs();
@@ -389,11 +394,11 @@ function putDm(m) {
 function viewMsgs() {
   if (tv === 'dm' && dmPeer !== null) {
     return [...dmOf(dmPeer).values()].sort((a, b) => a.id - b.id).slice(-300)
-      .map((m) => ({ id: m.id, uid: m.from, text: m.text, ts: m.ts, edited: m.edited, dm: true }));
+      .map((m) => ({ id: m.id, uid: m.from, text: m.text, ts: m.ts, edited: m.edited, dm: true, file: m.file }));
   }
   if (tv === 'chan' && current !== null) {
     return [...msgsOf(current).values()].sort((a, b) => a.id - b.id).slice(-300)
-      .map((m) => ({ id: m.id, uid: m.user.id, text: m.text, ts: m.ts, edited: m.edited, dm: false, name: m.user.username }));
+      .map((m) => ({ id: m.id, uid: m.user.id, text: m.text, ts: m.ts, edited: m.edited, dm: false, name: m.user.username, file: m.file }));
   }
   return [];
 }
@@ -421,9 +426,12 @@ function msgRow(m, prev) {
   }
   row.append(gut, col);
   if (editing && editing.dm === m.dm && editing.id === m.id) { col.append(editorEl()); return row; }
-  const tx = el('div', { className: 'tx', textContent: m.text });
-  if (m.edited) tx.append(el('small', { className: 'edited', textContent: '(modificato)', title: new Date(m.edited * 1000).toLocaleString() }));
-  col.append(tx);
+  if (m.text || !m.file) {
+    const tx = el('div', { className: 'tx', textContent: m.text });
+    if (m.edited) tx.append(el('small', { className: 'edited', textContent: '(modificato)', title: new Date(m.edited * 1000).toLocaleString() }));
+    col.append(tx);
+  }
+  if (m.file) col.append(fileEl(m.file));
   const mine = me && m.uid === me.id;
   const canEdit = mine && can(P.SEND);
   const canDel = mine || (!m.dm && can(P.MSGS));
@@ -475,8 +483,8 @@ function cancelEdit() { editing = null; renderLog(); }
 function saveEdit() {
   if (!editing) return;
   const text = editing.draft.trim();
-  if (!text) { toast('Il messaggio non può essere vuoto: per toglierlo, eliminalo.'); return; }
   const m = findMsg(editing.dm, editing.id);
+  if (!text && !(m && m.file)) { toast('Il messaggio non può essere vuoto: per toglierlo, eliminalo.'); return; }
   if (m && text !== m.text) sendWs({ t: editing.dm ? 'dm_edit' : 'edit', id: editing.id, text });
   editing = null;
   renderLog();
@@ -493,7 +501,8 @@ function renderComposer() {
   const target = tv === 'dm' ? dmPeer !== null : !!ch;
   const ok = can(P.SEND) && target;
   $('text').disabled = !ok;
-  $('sendBtn').disabled = !ok;
+  $('sendBtn').disabled = !ok || (!!att && att.state === 'up');
+  $('attBtn').disabled = !ok;
   $('text').placeholder = !can(P.SEND) ? 'Non hai il permesso di scrivere'
     : tv === 'dm' && dmPeer !== null ? 'Scrivi a ' + dname(dmPeer)
     : ch ? 'Scrivi in #' + ch.name : 'Scrivi un messaggio';
@@ -510,12 +519,114 @@ $('text').onkeydown = (e) => {
 $('form').onsubmit = (e) => {
   e.preventDefault();
   const text = $('text').value.trim();
-  if (!text || !can(P.SEND)) return;
+  if (!can(P.SEND)) return;
+  if (att && att.state === 'up') { toast('Aspetta la fine del caricamento del file.'); return; }
+  const file = att && att.state === 'ok' ? att.id : null;
+  if (att && att.state === 'err') { toast(att.err); return; }
+  if (!text && !file) return;
   const msg = tv === 'dm'
-    ? (dmPeer !== null && { t: 'dm_send', to: dmPeer, text })
-    : (current !== null && { t: 'send', channel: current, text });
-  if (msg && sendWs(msg)) { $('text').value = ''; autoGrow(); }
+    ? (dmPeer !== null && { t: 'dm_send', to: dmPeer, text, file })
+    : (current !== null && { t: 'send', channel: current, text, file });
+  if (msg && sendWs(msg)) { $('text').value = ''; autoGrow(); clearAtt(false); }
 };
+
+/* ---------- allegati ---------- */
+let att = null;                                   // file in preparazione: {name, size, state: 'up'|'ok'|'err', id, pct, err, xhr}
+const fmtSize = (n) => n < 1024 ? n + ' B' : n < 1048576 ? Math.round(n / 1024) + ' KB' : (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + ' MB';
+function renderAtt() {
+  const bar = $('attBar');
+  bar.hidden = !att || inStage;
+  $('sendBtn').disabled = !(can(P.SEND) && (tv === 'dm' ? dmPeer !== null : !!channels.find((c) => c.id === current))) || (!!att && att.state === 'up');
+  if (!att) return;
+  $('attName').textContent = att.name;
+  $('attState').textContent = att.state === 'up' ? 'Caricamento… ' + att.pct + '%'
+    : att.state === 'ok' ? fmtSize(att.size) + ' · pronto da inviare' : att.err;
+  bar.classList.toggle('bad', att.state === 'err');
+  $('attProg').style.width = (att.state === 'up' ? att.pct : 0) + '%';
+}
+function clearAtt(abort = true) {
+  if (att && att.xhr && abort && att.state === 'up') att.xhr.abort();
+  att = null;
+  renderAtt();
+}
+function attach(file) {
+  if (!file || !can(P.SEND)) return;
+  if (!(tv === 'dm' ? dmPeer !== null : current !== null)) { toast('Scegli prima dove inviarlo.'); return; }
+  clearAtt();
+  const a = att = { name: file.name || 'file', size: file.size, state: 'up', pct: 0, id: null, err: '' };
+  const x = a.xhr = new XMLHttpRequest();
+  x.open('POST', '/api/files');
+  x.setRequestHeader('Authorization', 'Bearer ' + token);
+  x.setRequestHeader('X-Filename', encodeURIComponent(a.name));
+  x.upload.onprogress = (e) => { if (e.lengthComputable && att === a) { a.pct = Math.round(e.loaded / e.total * 100); renderAtt(); } };
+  x.onload = () => {
+    if (att !== a) return;
+    let r = {};
+    try { r = JSON.parse(x.responseText); } catch {}
+    if (x.status === 200 && r.id) { a.id = r.id; a.state = 'ok'; }
+    else { a.state = 'err'; a.err = r.error || (x.status === 413 ? 'File troppo grande.' : 'Caricamento non riuscito.'); }
+    renderAtt();
+  };
+  x.onerror = () => { if (att === a) { a.state = 'err'; a.err = 'Caricamento non riuscito: controlla la connessione.'; renderAtt(); } };
+  x.send(file);
+  renderAtt();
+}
+$('attBtn').onclick = () => $('attFile').click();
+$('attFile').onchange = (e) => { attach(e.target.files[0]); e.target.value = ''; };
+$('attClear').onclick = () => clearAtt();
+$('text').addEventListener('paste', (e) => {
+  const f = e.clipboardData && e.clipboardData.files && e.clipboardData.files[0];
+  if (f) { e.preventDefault(); attach(f); }
+});
+let dragDepth = 0;
+const hasFiles = (e) => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+$('main').addEventListener('dragenter', (e) => { if (hasFiles(e)) { dragDepth++; $('main').classList.add('drop'); } });
+$('main').addEventListener('dragleave', (e) => { if (hasFiles(e) && --dragDepth <= 0) { dragDepth = 0; $('main').classList.remove('drop'); } });
+$('main').addEventListener('dragover', (e) => { if (hasFiles(e)) e.preventDefault(); });
+$('main').addEventListener('drop', (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault(); dragDepth = 0; $('main').classList.remove('drop');
+  attach(e.dataTransfer.files[0]);
+});
+
+/** I file si scaricano con il token: li prendo con fetch e li mostro da un indirizzo locale (blob). */
+const fileCache = new Map();
+function fetchFile(id) {
+  if (!fileCache.has(id)) {
+    fileCache.set(id, fetch('/api/files/' + id, { headers: { Authorization: 'Bearer ' + token } })
+      .then((r) => { if (!r.ok) throw new Error(); return r.blob(); })
+      .then((b) => URL.createObjectURL(b))
+      .catch((e) => { fileCache.delete(id); throw e; }));
+  }
+  return fileCache.get(id);
+}
+function fileEl(f) {
+  if (/^image\/(png|jpeg|gif|webp)$/.test(f.mime)) {
+    const box = el('div', { className: 'att-img', title: f.name });
+    const img = el('img', { alt: f.name, loading: 'lazy' });
+    box.append(img);
+    fetchFile(f.id).then((u) => {
+      img.onload = () => { const l = $('log'); if (l.scrollHeight - l.scrollTop - l.clientHeight < 500) l.scrollTop = l.scrollHeight; box.classList.add('ok'); };
+      img.src = u;
+      box.onclick = () => window.open(u, '_blank', 'noopener');
+    }).catch(() => { box.classList.add('bad'); box.textContent = 'Immagine non disponibile'; });
+    return box;
+  }
+  const a = el('button', { type: 'button', className: 'att-file', title: 'Scarica ' + f.name });
+  a.innerHTML = ico('file');
+  a.append(el('span', { className: 'att-meta' }, el('b', { textContent: f.name }), el('small', { textContent: fmtSize(f.size) })));
+  a.insertAdjacentHTML('beforeend', ico('download'));
+  a.onclick = async () => {
+    a.disabled = true;
+    try {
+      const u = await fetchFile(f.id);
+      const l = el('a', { href: u, download: f.name });
+      document.body.append(l); l.click(); l.remove();
+    } catch { toast('Non riesco a scaricare il file.'); }
+    a.disabled = false;
+  };
+  return a;
+}
 
 /* ---------- vista: canali, DM, stanza vocale ---------- */
 function closeNav() {
@@ -571,6 +682,7 @@ function renderView() {
   $('stage').hidden = !stage;
   $('log').hidden = stage;
   $('form').hidden = stage;
+  renderAtt();
   renderTitle();
   renderComposer();
   renderSide();
@@ -818,7 +930,8 @@ function onDmMessage(m) {
     if (incoming) markRead(peer);
   } else if (incoming) {
     c.unread = (c.unread || 0) + 1;
-    toast(dname(peer) + ': ' + (m.text.length > 80 ? m.text.slice(0, 80) + '…' : m.text));
+    const pv = m.text || (m.file ? 'Ha inviato un file: ' + m.file.name : '');
+    toast(dname(peer) + ': ' + (pv.length > 80 ? pv.slice(0, 80) + '…' : pv));
   }
   renderDms();
 }
@@ -1322,9 +1435,12 @@ let pinKey = null;
 let actx = null, master = null;
 let signalChain = Promise.resolve();
 
+let noteTimer;
 function note(text) {
   $('vnote').textContent = text || '';
+  clearTimeout(noteTimer);
   if (text && $('stage').hidden) toast(text);
+  else if (text) noteTimer = setTimeout(() => { $('vnote').textContent = ''; }, 9000);   // l'avviso sparisce da solo
 }
 function ensureAudioCtx() {
   try {

@@ -166,6 +166,24 @@ con l'audio di un solo programma), cosa che Firefox non permette.
 Per scaricarla vai su [Releases](https://github.com/BigScavatore/hstle-desktop/releases/latest): nel README
 della repository trovi quale file scegliere per ogni sistema e come avviarlo.
 
+## Allegati
+
+Con la graffetta accanto al campo di testo (o trascinando un file sulla chat, o incollando un'immagine) si
+allega un file a un messaggio, nei canali e nei messaggi privati. Le immagini (PNG, JPEG, GIF, WebP) si
+vedono nella chat; gli altri file si scaricano con un clic.
+
+- I file stanno su disco, nella cartella `<database>.files` (di default accanto al database; si cambia con
+  `HSTLE_FILES`). **Per il backup vanno copiati insieme al database.** Il caricamento è a pezzi su disco:
+  un file grande non pesa sulla memoria del server.
+- Limiti: `HSTLE_MAX_FILE_MB` per file (default 25) e `HSTLE_FILES_TOTAL_MB` per tutti i file insieme
+  (default 4096). Con nginx davanti, alza anche `client_max_body_size` (per esempio `client_max_body_size 30m;`),
+  altrimenti nginx rifiuta i file sopra 1 MB.
+- Per scaricare serve il token; i file dei messaggi privati li vedono solo i due partecipanti.
+- Un file mai inviato, o di un messaggio cancellato, viene tolto dal disco entro dieci minuti.
+- API: `POST /api/files` (corpo = il file, intestazione `X-Filename` con il nome codificato) risponde
+  `{id, name, mime, size}`; poi il messaggio WebSocket `send` / `dm_send` ha il campo `file` con quell'id.
+  `GET /api/files/{id}` scarica.
+
 ## Build per il server
 
 ```bash

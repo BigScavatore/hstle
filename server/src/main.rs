@@ -1,5 +1,6 @@
 mod auth;
 mod db;
+mod files;
 mod perms;
 mod profile;
 mod voice;
@@ -34,6 +35,8 @@ pub struct AppState {
     pub ice: Arc<Value>,
     /// Chi è connesso adesso.
     pub conns: Conns,
+    /// Cartella dei file allegati e limiti (byte).
+    pub files: Arc<files::Store>,
 }
 
 /// Errore restituito come JSON `{"error": "..."}` con il codice HTTP indicato.
@@ -81,7 +84,9 @@ async fn main() {
         next_conn: Arc::new(AtomicU64::new(1)),
         ice: Arc::new(ice_servers()),
         conns: Arc::new(Mutex::new(HashMap::new())),
+        files: Arc::new(files::Store::from_env(&db_path)),
     };
+    files::start_cleanup(state.clone());
 
     let app = Router::new()
         .route("/", get(index))
@@ -94,6 +99,11 @@ async fn main() {
         .route("/api/avatar", post(profile::set_avatar))
         .route("/api/avatar/clear", post(profile::clear_avatar))
         .route("/api/avatar/{id}", get(profile::get_avatar))
+        .route(
+            "/api/files",
+            post(files::upload).layer(axum::extract::DefaultBodyLimit::disable()),
+        )
+        .route("/api/files/{id}", get(files::download))
         .route("/api/register", post(auth::register))
         .route("/api/login", post(auth::login))
         .route("/api/logout", post(auth::logout))

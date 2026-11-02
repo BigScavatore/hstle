@@ -33,7 +33,13 @@ enum ClientMsg {
     #[serde(rename = "load_history")]
     LoadHistory { channel: i64 },
     #[serde(rename = "send")]
-    Send { channel: i64, text: String },
+    Send {
+        channel: i64,
+        text: String,
+        /// Id di un file già caricato con POST /api/files.
+        #[serde(default)]
+        file: Option<String>,
+    },
     #[serde(rename = "edit")]
     Edit { id: i64, text: String },
     #[serde(rename = "delete")]
@@ -103,7 +109,12 @@ enum ClientMsg {
     #[serde(rename = "dm_history")]
     DmHistory { with: i64 },
     #[serde(rename = "dm_send")]
-    DmSend { to: i64, text: String },
+    DmSend {
+        to: i64,
+        text: String,
+        #[serde(default)]
+        file: Option<String>,
+    },
     #[serde(rename = "dm_edit")]
     DmEdit { id: i64, text: String },
     #[serde(rename = "dm_delete")]
@@ -438,13 +449,13 @@ async fn handle(st: &AppState, c: &Conn, msg: ClientMsg) {
             let messages = st.db.history(channel, HISTORY_LIMIT).await.unwrap_or_default();
             c.reply(json!({ "t": "history", "channel": channel, "messages": messages }));
         }
-        ClientMsg::Send { channel, text } => {
+        ClientMsg::Send { channel, text, file } => {
             let text = clean_text(text);
-            if text.is_empty() {
+            if text.is_empty() && file.is_none() {
                 return;
             }
             // Il nome dell'autore viene dalla sessione, mai dal client.
-            match flat(st.db.send_message(channel, c.user.clone(), text).await) {
+            match flat(st.db.send_message(channel, c.user.clone(), text, file).await) {
                 Ok(m) => announce(st, json!({ "t": "message", "message": m })),
                 Err(e) => c.notice(e),
             }
@@ -640,12 +651,12 @@ async fn handle(st: &AppState, c: &Conn, msg: ClientMsg) {
                 .unwrap_or_default();
             c.reply(json!({ "t": "dm_history", "with": with, "messages": messages }));
         }
-        ClientMsg::DmSend { to, text } => {
+        ClientMsg::DmSend { to, text, file } => {
             let text = clean_text(text);
-            if text.is_empty() {
+            if text.is_empty() && file.is_none() {
                 return;
             }
-            match flat(st.db.dm_send(c.user.id, to, text).await) {
+            match flat(st.db.dm_send(c.user.id, to, text, file).await) {
                 Ok(m) => {
                     let ev = json!({ "t": "dm_message", "message": m });
                     send_to_user(st, c.user.id, &ev);
