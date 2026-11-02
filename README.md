@@ -156,27 +156,63 @@ da un altro dispositivo, la prima connessione viene espulsa dal canale.
 | `POST /api/avatar/clear` | toglie la propria immagine |
 | `GET /api/avatar/{id}` | immagine di un utente; serve il token (non è pubblica) |
 
-## App desktop per Windows
+## App desktop (Windows, macOS, Linux)
 
 Nella cartella `desktop/` c'è un'app Electron che apre il client del tuo server in una finestra
 Chromium. Serve soprattutto a condividere lo schermo **con l'audio del computer**, cosa che
 Firefox non permette. Ha un selettore proprio (schermi e finestre con anteprima) e l'indirizzo
 del server si cambia dal menu *Hstle → Cambia server*.
 
+### Come scaricarla
+
+Vai su **[Releases](https://github.com/BigScavatore/hstle/releases/latest)** e, in fondo, scarica il file per il tuo sistema:
+
+| Sistema | File | Come si avvia |
+|---|---|---|
+| **Windows 10/11** | `Hstle-…-win-x64.zip` | Estrai lo zip in una cartella e apri `Hstle.exe`. Se compare l'avviso di SmartScreen: *Ulteriori informazioni → Esegui comunque* (l'app non è firmata). |
+| **macOS** (Apple Silicon: M1, M2, M3…) | `Hstle-…-mac-arm64.dmg` | Apri il dmg e trascina Hstle in *Applicazioni*. Al primo avvio: tasto destro su Hstle → *Apri* → *Apri*. Se dice che è danneggiata: `xattr -cr /Applications/Hstle.app` da Terminale. |
+| **macOS** (Intel) | `Hstle-…-mac-x64.dmg` | Come sopra. |
+| **Linux** (qualsiasi distribuzione, 64 bit) | `Hstle-…-linux-x64.AppImage` | `chmod +x Hstle-*.AppImage` poi `./Hstle-*.AppImage`. Se non parte per FUSE mancante: `./Hstle-*.AppImage --appimage-extract-and-run`. |
+| **Linux** (senza AppImage) | `Hstle-…-linux-x64.tar.gz` | `tar xzf Hstle-*.tar.gz` ed esegui il programma `hstle` nella cartella. |
+
+Non sai quale Mac hai? Menu Apple → *Informazioni su questo Mac*: "Chip Apple M…" è Apple Silicon, "Intel" è Intel.
+
+Cosa cambia da un sistema all'altro:
+
+- **Windows**: tutto, compreso l'audio di sistema e quello di un solo programma (anche con lo schermo intero).
+- **macOS e Linux**: schermo e finestre con il selettore di Hstle; l'audio del computer non viene catturato da Electron, quindi il video si condivide senza audio (su Linux dipende dal sistema audio e dalla versione). L'audio di un solo programma è solo per Windows.
+- Se non ti servono queste cose, puoi usare semplicemente il browser (Chrome o Edge): l'app serve per l'audio.
+
+### Come crearla da solo
+
 ```bash
 cd desktop
 npm install
 npm start            # prova
-npm run dist         # crea dist/Hstle-0.1.0-win.zip
+npm run dist:win     # crea dist/Hstle-<versione>-win-x64.zip (da Windows)
+npm run dist:mac     # crea il dmg (da un Mac)
+npm run dist:linux   # crea AppImage e tar.gz (da Linux)
 ```
 
-Alla condivisione, per una **finestra** puoi scegliere "Solo l'audio di questa app" (usa il pacchetto
-[`application-loopback`](https://github.com/WerdoxDev/application-loopback), che include due piccoli
-programmi Windows, `ProcessList.exe` e `ApplicationLoopback.exe`, a cura del suo autore); per uno
-schermo intero resta "Tutto l'audio del computer", che include anche la chiamata (meglio con le cuffie).
+I file delle Release li crea da sola la GitHub Action `.github/workflows/desktop.yml`: per pubblicare
+una nuova versione aggiorna `version` in `desktop/package.json`, poi
 
-Lo zip si estrae dove si vuole e si avvia con `Hstle.exe` (non è firmato: Windows può mostrare
-l'avviso di SmartScreen, "Ulteriori informazioni → Esegui comunque").
+```bash
+git tag desktop-v0.2.0
+git push origin desktop-v0.2.0
+```
+
+Dopo qualche minuto trovi i file nella pagina Releases. Dal tab *Actions → App desktop → Run workflow*
+puoi anche solo provare la build (i file restano negli *artifacts* dell'esecuzione).
+
+Se `npm install` non scarica Electron (npm recenti saltano gli script di installazione): `npm install-scripts approve electron`
+e riesegui `npm install`.
+
+Alla condivisione, per una **finestra** (solo Windows) puoi scegliere "Solo l'audio di questa app", e per
+uno **schermo intero** "Solo l'audio di: <programma>" (usa il pacchetto
+[`application-loopback`](https://github.com/WerdoxDev/application-loopback), che include due piccoli
+programmi Windows, `ProcessList.exe` e `ApplicationLoopback.exe`, a cura del suo autore). "Tutto l'audio del
+computer" include anche la chiamata (meglio con le cuffie).
 
 ## Build per il server
 

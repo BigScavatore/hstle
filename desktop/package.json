@@ -1,12 +1,15 @@
 {
   "name": "hstle-desktop",
   "version": "0.1.0",
-  "description": "Hstle per Windows: il client web in una finestra, con condivisione di schermo e audio di sistema",
+  "description": "Hstle desktop: il client web in una finestra, con condivisione di schermo e audio di sistema",
   "main": "main.js",
   "private": true,
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win zip"
+    "dist": "electron-builder --win zip",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux"
   },
   "devDependencies": {
     "electron": "^33.2.0",
@@ -26,7 +29,12 @@
     ],
     "win": {
       "target": [
-        "zip"
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "icon.png",
       "signAndEditExecutable": false
@@ -36,9 +44,48 @@
     },
     "asarUnpack": [
       "node_modules/application-loopback/bin/**"
-    ]
+    ],
+    "artifactName": "Hstle-${version}-${os}-${arch}.${ext}",
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icon.png",
+      "category": "public.app-category.social-networking",
+      "identity": null
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "tar.gz",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icon.png",
+      "category": "Network",
+      "maintainer": "BigScavatore"
+    }
   },
   "dependencies": {
     "application-loopback": "^1.2.7"
+  },
+  "author": "BigScavatore",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BigScavatore/hstle.git"
   }
 }
