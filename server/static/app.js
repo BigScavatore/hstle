@@ -960,6 +960,7 @@ function openSettings(tab) {
   $('nsToggle').checked = ns;
   renderNsNote();
   settingsTab(tab || 'profile');
+  refreshDevices();
   renderSwatches();
   refreshSettingsPreview();
   if (!sdlg.open) sdlg.showModal();
@@ -976,6 +977,7 @@ $('sTabAccount').onclick = () => settingsTab('account');
 $('settingsBtn').onclick = () => openSettings('audio');
 $('dockMe').onclick = () => openSettings('profile');
 $('setClose').onclick = () => sdlg.close();
+sdlg.addEventListener('close', () => stopMeter());
 sdlg.onclick = (e) => { if (e.target === sdlg) sdlg.close(); };
 
 function renderSwatches() {
@@ -1330,6 +1332,7 @@ function ensureAudioCtx() {
       actx = new (window.AudioContext || window.webkitAudioContext)();
       master = actx.createGain();
       master.connect(actx.destination);
+      if (dev.spk) applySink();
     }
     if (actx.state === 'suspended') actx.resume();
   } catch {}
@@ -1376,7 +1379,15 @@ function applyAudioState() {
   if (voice.active) sendMeta();
   renderAll();
 }
-function toggleMute() {
+async function toggleMute() {
+  if (voice.active && !voice.mic) {                                   // niente microfono: riprovo ad aprirlo
+    try { await setMicTrack(await getMic()); note(''); }
+    catch (e) { note(micErrorText(e)); renderAll(); return; }
+    voice.muted = false; voice.deaf = false;
+    applyAudioState();
+    playSound('unmute');
+    return;
+  }
   if (voice.deaf) { voice.deaf = false; voice.muted = false; }       // riattivare il microfono riattiva anche l'audio
   else voice.muted = !voice.muted;
   applyAudioState();
@@ -1422,7 +1433,156 @@ function playSound(kind) {
 
 /* ---------- riduzione del rumore ---------- */
 // channelCount: 1 = microfono mono: con alcuni microfoni (USB, cuffie) l'altro canale è vuoto e dall'altra parte si sentirebbe da un lato solo
-function micConstraints() { return { echoCancellation: true, noiseSuppression: ns, autoGainControl: true, channelCount: 1 }; }
+function micConstraints(id) {
+  const c = { echoCancellation: true, noiseSuppression: ns, autoGainControl: true, channelCount: 1 };
+  if (id) c.deviceId = { exact: id };
+  return c;
+}
+/* ---------- microfono, cuffie, camera ---------- */
+const dev = { mic: lsGet('hstle-mic') || '', spk: lsGet('hstle-spk') || '', cam: lsGet('hstle-cam') || '' };
+let shareMode = lsGet('hstle-share') === 'detail' ? 'detail' : 'motion';
+const inAppBrowser = /FBAN|FBAV|Instagram|Line\/|MicroMessenger|Snapchat|TikTok|; wv\)/i.test(navigator.userAgent);
+function micErrorText(e) {
+  const n = e && e.name;
+  if (!window.isSecureContext) return 'Il microfono funziona solo su una connessione HTTPS.';
+  if (inAppBrowser) return 'Questo browser integrato in un\'altra app blocca il microfono. Apri il link con Chrome o Safari.';
+  if (n === 'NotAllowedError' || n === 'SecurityError') return 'Permesso al microfono negato. Tocca il lucchetto accanto all\'indirizzo, scegli Consenti per il microfono e riprova. Su iPhone: Impostazioni > Safari > Microfono.';
+  if (n === 'NotFoundError' || n === 'OverconstrainedError') return 'Nessun microfono trovato. Collegalo e scegli quello giusto in Impostazioni > Audio e video.';
+  if (n === 'NotReadableError' || n === 'AbortError') return 'Il microfono è occupato da un\'altra app. Chiudila e riprova.';
+  return 'Non riesco ad aprire il microfono.';
+}
+async function getMic() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('nomedia');
+  let s;
+  if (dev.mic) {
+    try { s = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(dev.mic) }); }
+    catch (e) { if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) throw e; }   // dispositivo sparito: uso quello predefinito
+  }
+  if (!s) s = await navigator.mediaDevices.getUserMedia({ audio: micConstraints() });
+  const t = s.getAudioTracks()[0];
+  t.onended = () => { if (voice.mic === t && voice.active) { voice.mic = null; note('Il microfono si è scollegato: tocca il microfono per riprovare.'); renderAll(); } };
+  return t;
+}
+async function setMicTrack(t) {                      // sostituisce il microfono in uso, anche durante la chiamata
+  const old = voice.mic;
+  t.enabled = !isMuted();
+  voice.mic = t;
+  if (old) { old.onended = null; old.stop(); }
+  watchers.delete('me');
+  if (voice.active) watchSpeaking('me', new MediaStream([t]));
+  for (const p of voice.peers.values()) attachLocalTracks(p);
+  renderAll();
+}
+let wl = null;
+async function wakeLock(on) {                        // sul telefono lo schermo non si spegne durante la chiamata
+  try {
+    if (!on) { if (wl) { await wl.release(); wl = null; } return; }
+    if (navigator.wakeLock && !wl && document.visibilityState === 'visible') {
+      wl = await navigator.wakeLock.request('screen');
+      wl.addEventListener('release', () => { wl = null; });
+    }
+  } catch {}
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && voice.active) wakeLock(true); });
+
+const kindLabel = { audioinput: 'Microfono', audiooutput: 'Uscita audio', videoinput: 'Camera' };
+function fillSelect(sel, list, cur, kind) {
+  sel.textContent = '';
+  sel.append(el('option', { value: '', textContent: 'Predefinito del dispositivo' }));
+  list.filter((d) => d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications').forEach((d, i) => {
+    sel.append(el('option', { value: d.deviceId, textContent: d.label || (kindLabel[kind] + ' ' + (i + 1)) }));
+  });
+  sel.value = [...sel.options].some((o) => o.value === cur) ? cur : '';
+}
+async function refreshDevices() {
+  const md = navigator.mediaDevices;
+  const st = $('devStatus');
+  if (!md || !md.enumerateDevices) { st.textContent = 'Questo browser non permette di scegliere i dispositivi.'; st.className = 'bad'; return; }
+  let state = 'prompt';
+  try { state = (await navigator.permissions.query({ name: 'microphone' })).state; } catch {}
+  let list = [];
+  try { list = await md.enumerateDevices(); } catch {}
+  const hasLabels = list.some((d) => d.label);
+  const ins = list.filter((d) => d.kind === 'audioinput');
+  fillSelect($('selMic'), ins, dev.mic, 'audioinput');
+  fillSelect($('selSpk'), list.filter((d) => d.kind === 'audiooutput'), dev.spk, 'audiooutput');
+  fillSelect($('selCam'), list.filter((d) => d.kind === 'videoinput'), dev.cam, 'videoinput');
+  const canSink = !!(window.AudioContext && AudioContext.prototype.setSinkId);
+  $('spkRow').hidden = $('spkTestRow').hidden = !canSink;
+  let msg = '', bad = false;
+  if (!window.isSecureContext) { msg = 'Serve una connessione HTTPS: senza, il browser blocca microfono e camera.'; bad = true; }
+  else if (inAppBrowser) { msg = 'Stai usando il browser integrato di un\'altra app, che spesso blocca il microfono. Apri il link con Chrome o Safari.'; bad = true; }
+  else if (state === 'denied') { msg = 'Il permesso al microfono è bloccato. Tocca il lucchetto accanto all\'indirizzo, scegli Consenti e ricarica la pagina.'; bad = true; }
+  else if (!ins.length) { msg = 'Nessun microfono trovato. Collegane uno e riprova.'; bad = true; }
+  else if (!hasLabels || state === 'prompt') msg = 'Per vedere i nomi dei dispositivi serve il permesso al microfono.';
+  else msg = 'Microfono consentito.';
+  st.textContent = msg;
+  st.className = 'muted' + (bad ? ' bad' : '');
+  $('devAllow').hidden = bad && state === 'denied' || !window.isSecureContext || (hasLabels && state === 'granted');
+  $('selShare').value = shareMode;
+}
+$('devAllow').onclick = async () => {
+  try { const s = await navigator.mediaDevices.getUserMedia({ audio: true }); s.getTracks().forEach((t) => t.stop()); }
+  catch (e) { $('devStatus').textContent = micErrorText(e); $('devStatus').className = 'bad'; return; }
+  refreshDevices();
+};
+async function applySink() {
+  try { if (actx && actx.setSinkId) await actx.setSinkId(dev.spk || ''); } catch {}
+}
+$('selMic').onchange = async (e) => {
+  dev.mic = e.target.value; lsSet('hstle-mic', dev.mic);
+  stopMeter();
+  if (voice.active && voice.mic) { try { await setMicTrack(await getMic()); } catch (er) { note(micErrorText(er)); } }
+};
+$('selSpk').onchange = (e) => { dev.spk = e.target.value; lsSet('hstle-spk', dev.spk); ensureAudioCtx(); applySink(); };
+$('selCam').onchange = async (e) => {
+  dev.cam = e.target.value; lsSet('hstle-cam', dev.cam);
+  if (voice.active && voice.cam) { await toggleCam(); await toggleCam(); }     // riapro con la nuova camera
+};
+$('selShare').onchange = (e) => { shareMode = e.target.value; lsSet('hstle-share', shareMode); applyShareMode(); };
+$('spkTest').onclick = () => { ensureAudioCtx(); applySink(); const was = voice.deaf; if (!was) playSound('join'); else note('Hai le cuffie spente: riattivale per sentire la prova.'); };
+
+let meterStream = null, meterRaf = 0, meterCtx = null;
+function stopMeter() {
+  cancelAnimationFrame(meterRaf);
+  if (meterStream) meterStream.getTracks().forEach((t) => t.stop());
+  if (meterCtx) meterCtx.close().catch(() => {});
+  meterStream = meterCtx = null;
+  $('meter').style.width = '0';
+  $('micTest').textContent = 'Prova il microfono';
+  $('micTestNote').textContent = '';
+}
+$('micTest').onclick = async () => {
+  if (meterStream) { stopMeter(); return; }
+  try {
+    meterStream = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(dev.mic) });
+  } catch (e) {
+    try { meterStream = await navigator.mediaDevices.getUserMedia({ audio: micConstraints() }); }
+    catch (e2) { $('devStatus').textContent = micErrorText(e2); $('devStatus').className = 'bad'; return; }
+  }
+  refreshDevices();
+  meterCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const an = meterCtx.createAnalyser();
+  an.fftSize = 512;
+  meterCtx.createMediaStreamSource(meterStream).connect(an);
+  const buf = new Uint8Array(an.fftSize);
+  $('micTest').textContent = 'Ferma la prova';
+  $('micTestNote').textContent = 'Parla: la barra deve muoversi.';
+  const tick = () => {
+    an.getByteTimeDomainData(buf);
+    let peak = 0;
+    for (const v of buf) peak = Math.max(peak, Math.abs(v - 128));
+    $('meter').style.width = Math.min(100, peak / 64 * 100) + '%';
+    meterRaf = requestAnimationFrame(tick);
+  };
+  tick();
+};
+if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+  navigator.mediaDevices.addEventListener('devicechange', async () => {
+    if (sdlg.open) refreshDevices();
+    if (voice.active && voice.mic && voice.mic.readyState === 'ended') { try { await setMicTrack(await getMic()); } catch {} }
+  });
+}
 function renderNsNote() {
   const sup = navigator.mediaDevices && navigator.mediaDevices.getSupportedConstraints && navigator.mediaDevices.getSupportedConstraints().noiseSuppression;
   $('nsNote').textContent = sup === false
@@ -1435,21 +1595,12 @@ async function setNs(on) {
   $('nsToggle').checked = on;
   renderControls();
   if (!voice.mic) return;
-  const old = voice.mic;
   try {
-    await old.applyConstraints(micConstraints());
-    if (old.getSettings().noiseSuppression === on) return;
+    await voice.mic.applyConstraints(micConstraints());
+    if (voice.mic.getSettings().noiseSuppression === on) return;
   } catch {}
-  try {                                     // il browser non cambia al volo: riapro il microfono
-    const s = await navigator.mediaDevices.getUserMedia({ audio: micConstraints() });
-    const t = s.getAudioTracks()[0];
-    t.enabled = !isMuted();
-    voice.mic = t;
-    old.stop();
-    watchers.delete('me');
-    if (voice.active) watchSpeaking('me', new MediaStream([t]));
-    for (const p of voice.peers.values()) attachLocalTracks(p);
-  } catch { note('Non riesco a cambiare la riduzione del rumore.'); }
+  try { await setMicTrack(await getMic()); }          // il browser non cambia al volo: riapro il microfono
+  catch { note('Non riesco a cambiare la riduzione del rumore.'); }
 }
 $('nsToggle').onchange = (e) => setNs(e.target.checked);
 $('soundToggle').checked = sounds;
@@ -1634,13 +1785,13 @@ async function joinVoice(channel) {
   closeNav();
   renderAll();
   try {
-    const s = await navigator.mediaDevices.getUserMedia({ audio: micConstraints() });
-    voice.mic = s.getAudioTracks()[0];
+    voice.mic = await getMic();
     voice.mic.enabled = !isMuted();
-  } catch {
+  } catch (e) {
     voice.mic = null;
-    note('Microfono non disponibile: entri solo in ascolto.');
+    note(micErrorText(e) + ' Per ora entri solo in ascolto: tocca il microfono per riprovare.');
   }
+  wakeLock(true);
   if (!sendWs({ t: 'voice_join', channel })) {
     voice.joining = false;
     if (voice.mic) voice.mic.stop();
@@ -1656,6 +1807,7 @@ function leaveVoice(notify = true) {
   for (const id of [...voice.peers.keys()]) closePeer(id);
   [voice.mic, voice.cam, voice.scr, voice.scrAudio].forEach((t) => t && t.stop());
   stopAppAudio();
+  wakeLock(false);
   voice.mic = voice.cam = voice.scr = voice.scrAudio = voice.camStream = voice.scrStream = null;
   watchers.clear();
   voice.active = voice.joining = false;
@@ -1680,12 +1832,16 @@ async function toggleCam() {
     voice.cam = voice.camStream = null;
   } else {
     try {
-      const s = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 24 } } });
+      const s = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 24 }, ...(dev.cam ? { deviceId: { ideal: dev.cam } } : {}) } });
       const t = s.getVideoTracks()[0];
       t.onended = () => { if (voice.cam === t) toggleCam(); };
       voice.cam = t;
       voice.camStream = new MediaStream([t]);
-    } catch { note('Impossibile accedere alla camera.'); return; }
+    } catch (e) {
+      const n = e && e.name;
+      note(n === 'NotAllowedError' ? 'Permesso alla camera negato: consentilo dal lucchetto accanto all\'indirizzo.' : n === 'NotFoundError' ? 'Nessuna camera trovata.' : n === 'NotReadableError' ? 'La camera è occupata da un\'altra app.' : 'Impossibile accedere alla camera.');
+      return;
+    }
   }
   afterLocalChange();
 }
@@ -1699,7 +1855,7 @@ async function toggleScreen() {
   } else {
     try {
       const s = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: { ideal: 20 } },
+        video: { frameRate: { ideal: shareMode === 'motion' ? 30 : 15 } },
         // l'audio del computer: niente filtri (rovinerebbero musica e giochi) e, per le schede, non si risente in locale
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, suppressLocalAudioPlayback: true, restrictOwnAudio: true },
         systemAudio: 'include',
@@ -1707,7 +1863,7 @@ async function toggleScreen() {
       const t = s.getVideoTracks()[0];
       let au = s.getAudioTracks()[0] || null;
       if (!au && window.hstleApp && await hstleApp.appAudioActive().catch(() => false)) au = await appAudioTrack();   // app desktop: audio di una sola app
-      t.contentHint = 'detail';
+      t.contentHint = shareMode;
       t.onended = () => { if (voice.scr === t) toggleScreen(); };
       voice.scr = t;
       voice.scrAudio = au;
@@ -1791,12 +1947,21 @@ function attachLocalTracks(peer) {
   });
 }
 const MAX_BITRATE = [64000, 700000, 2500000, 96000];
+const maxBitrate = (i) => i === 2 && shareMode === 'motion' ? 3500000 : MAX_BITRATE[i];
+function applyShareMode() {                          // cambia modalità anche mentre condividi
+  const t = voice.scr;
+  if (!t) return;
+  t.contentHint = shareMode;
+  t.applyConstraints({ frameRate: { ideal: shareMode === 'motion' ? 30 : 15 } }).catch(() => {});
+  for (const p of voice.peers.values()) limitBitrate(p, 2);
+}
 async function limitBitrate(peer, i) {
   try {
     const sender = peer.pc.getTransceivers()[i].sender;
     const p = sender.getParameters();
     if (!p.encodings || !p.encodings.length) return;
-    p.encodings[0].maxBitrate = MAX_BITRATE[i];
+    p.encodings[0].maxBitrate = maxBitrate(i);
+    if (i === 2) p.degradationPreference = shareMode === 'motion' ? 'maintain-framerate' : 'maintain-resolution';
     await sender.setParameters(p);
   } catch {}
 }

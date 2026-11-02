@@ -196,3 +196,11 @@ Il binario risultante è in `server/target/release/`.
 6. Limite ai tentativi di login (o delegarlo al reverse proxy)
 7. Se serviranno chiamate più grandi: SFU in Rust (`str0m`)
 8. Client web vero (Svelte/Solid), PWA, notifiche
+
+## Dispositivi e condivisione dei giochi
+
+- **Impostazioni > Audio e video**: scelta di microfono, cuffie/altoparlanti (solo Chrome/Edge) e camera, con prova del microfono (barra del livello) e dell'audio. La scelta resta salvata e il microfono si cambia anche durante la chiamata.
+- **Permessi**: messaggi chiari se il microfono è negato, occupato, assente o se si usa un browser integrato di un'altra app. Toccando il microfono in chiamata si riprova ad aprirlo.
+- Su telefono lo schermo resta acceso durante la chiamata (Wake Lock).
+- **Condivisione schermo**: modalità *Fluidità* (30 fps, fino a 3,5 Mbit/s, per giochi e video) o *Nitidezza* (testo e programmi). Si cambia anche mentre si condivide.
+- **App desktop**: disattivato il rallentamento in background, così la cattura non si ferma quando un gioco copre la finestra di Hstle.

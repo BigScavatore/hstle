@@ -179,6 +179,28 @@
     </div>
 
     <div id="sPaneAudio" class="stack" hidden>
+      <div class="devbox">
+        <p class="muted" id="devStatus"></p>
+        <button type="button" class="btn" id="devAllow" hidden>Consenti l'accesso a microfono e camera</button>
+        <label class="fld"><span>Microfono</span>
+          <select id="selMic"></select></label>
+        <div class="meter" id="meterWrap"><i id="meter"></i></div>
+        <div class="row">
+          <button type="button" class="btn ghost" id="micTest">Prova il microfono</button>
+          <small class="muted" id="micTestNote"></small>
+        </div>
+        <label class="fld" id="spkRow"><span>Cuffie o altoparlanti</span>
+          <select id="selSpk"></select></label>
+        <div class="row" id="spkTestRow"><button type="button" class="btn ghost" id="spkTest">Prova l'audio</button></div>
+        <label class="fld"><span>Camera</span>
+          <select id="selCam"></select></label>
+      </div>
+      <label class="fld"><span>Condivisione dello schermo</span>
+        <select id="selShare">
+          <option value="motion">Fluidità: per giochi e video (più fotogrammi)</option>
+          <option value="detail">Nitidezza: per testo e programmi (più dettaglio)</option>
+        </select></label>
+      <p class="muted">Vale subito, anche mentre condividi. Per i giochi scegli Fluidità e condividi tutto lo schermo, non la singola finestra.</p>
       <label class="opt">
         <span><b>Riduzione del rumore</b>
           <small>Toglie dal microfono i rumori di fondo, come tastiera e ventola. Vale subito, anche durante una chiamata.</small></span>
