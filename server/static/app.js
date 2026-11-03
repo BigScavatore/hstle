@@ -1971,7 +1971,7 @@ async function toggleScreen() {
   } else {
     try {
       const s = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: { ideal: shareMode === 'motion' ? 30 : 15 } },
+        video: shareVideo(),
         // l'audio del computer: niente filtri (rovinerebbero musica e giochi) e, per le schede, non si risente in locale
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, suppressLocalAudioPlayback: true, restrictOwnAudio: true },
         systemAudio: 'include',
@@ -2063,12 +2063,19 @@ function attachLocalTracks(peer) {
   });
 }
 const MAX_BITRATE = [64000, 700000, 2500000, 96000];
-const maxBitrate = (i) => i === 2 && shareMode === 'motion' ? 3500000 : MAX_BITRATE[i];
+const maxBitrate = (i) => i === 2 && shareMode === 'motion' ? 4000000 : MAX_BITRATE[i];
+// Fluidità: al massimo 720p ma fino a 60 fotogrammi al secondo (meno pixel da codificare = meno lag).
+// Nitidezza: fino a 1080p ma pochi fotogrammi, per testo e programmi.
+function shareVideo() {
+  return shareMode === 'motion'
+    ? { width: { max: 1280 }, height: { max: 720 }, frameRate: { ideal: 60, max: 60 } }
+    : { width: { max: 1920 }, height: { max: 1080 }, frameRate: { ideal: 15 } };
+}
 function applyShareMode() {                          // cambia modalità anche mentre condividi
   const t = voice.scr;
   if (!t) return;
   t.contentHint = shareMode;
-  t.applyConstraints({ frameRate: { ideal: shareMode === 'motion' ? 30 : 15 } }).catch(() => {});
+  t.applyConstraints(shareVideo()).catch(() => {});
   for (const p of voice.peers.values()) limitBitrate(p, 2);
 }
 async function limitBitrate(peer, i) {
@@ -2077,6 +2084,10 @@ async function limitBitrate(peer, i) {
     const p = sender.getParameters();
     if (!p.encodings || !p.encodings.length) return;
     p.encodings[0].maxBitrate = maxBitrate(i);
+    if (i === 2 && voice.scr) {                    // se il browser ha mandato più pixel del limite, li riduce prima di inviare
+      const h = voice.scr.getSettings().height || 0;
+      p.encodings[0].scaleResolutionDownBy = Math.max(1, h / (shareMode === 'motion' ? 720 : 1080));
+    }
     if (i === 2) p.degradationPreference = shareMode === 'motion' ? 'maintain-framerate' : 'maintain-resolution';
     await sender.setParameters(p);
   } catch {}
