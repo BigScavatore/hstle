@@ -1060,6 +1060,7 @@ function volumeBlock(uid, label) {
 /* ================= impostazioni ================= */
 const sdlg = $('settingsDlg');
 let draft = { name: '', bio: '', accent: ACCENTS[0] };
+let nsMode = 'off';                            // quale filtro sta davvero lavorando: rnnoise | browser | off
 let ns = lsGet('hstle-ns') !== '0';       // riduzione del rumore: acceso di default
 
 function openSettings(tab) {
@@ -1574,7 +1575,9 @@ async function rnnoiseTrack(raw) {
     const dst = ctx.createMediaStreamDestination();
     src.connect(node);
     node.connect(dst);
-    await ctx.resume();
+    // se il browser non fa partire l'audio senza un gesto, resume() può restare appeso: meglio fallire e usare il filtro del browser
+    await Promise.race([ctx.resume(), new Promise((r) => setTimeout(r, 1500))]);
+    if (ctx.state !== 'running') throw new Error('contesto audio fermo (' + ctx.state + ')');
     const out = dst.stream.getAudioTracks()[0];
     const stop = out.stop.bind(out);
     out.stop = () => { stop(); raw.stop(); ctx.close().catch(() => {}); };        // fermare il filtro ferma anche il microfono vero
@@ -1601,9 +1604,15 @@ async function getMic() {
   let t = null;
   if (ns && window.AudioWorkletNode) {                                    // prima il filtro avanzato...
     const s = await openMicStream(false);
-    try { t = await rnnoiseTrack(s.getAudioTracks()[0]); }
-    catch { s.getTracks().forEach((x) => x.stop()); t = null; }
+    try { t = await rnnoiseTrack(s.getAudioTracks()[0]); nsMode = 'rnnoise'; }
+    catch (e) {
+      s.getTracks().forEach((x) => x.stop()); t = null;
+      console.warn('RNNoise non partito:', e && (e.message || e.name || e));
+      nsMode = 'browser';
+      note('Il filtro antirumore avanzato non parte (' + ((e && (e.message || e.name)) || 'errore') + '): uso quello del browser.');
+    }
   }
+  if (!t) nsMode = ns ? 'browser' : 'off';
   if (!t) t = (await openMicStream(ns)).getAudioTracks()[0];              // ...altrimenti quello del browser (o nessuno)
   t.onended = () => { if (voice.mic === t && voice.active) { voice.mic = null; note('Il microfono si è scollegato: tocca il microfono per riprovare.'); renderAll(); } };
   return t;
@@ -1616,6 +1625,7 @@ async function setMicTrack(t) {                      // sostituisce il microfono
   watchers.delete('me');
   if (voice.active) watchSpeaking('me', new MediaStream([t]));
   for (const p of voice.peers.values()) attachLocalTracks(p);
+  renderNsNote();
   renderAll();
 }
 let wl = null;
@@ -1729,6 +1739,10 @@ if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
   });
 }
 function renderNsNote() {
+  if (voice.mic && ns) {      // dice quale filtro è davvero attivo, così si vede se RNNoise è partito
+    $('nsNote').textContent = nsMode === 'rnnoise' ? 'Filtro avanzato (RNNoise) attivo.' : 'Filtro avanzato non attivo: sta lavorando quello del browser (dettagli nella console).';
+    return;
+  }
   const sup = navigator.mediaDevices && navigator.mediaDevices.getSupportedConstraints && navigator.mediaDevices.getSupportedConstraints().noiseSuppression;
   $('nsNote').textContent = sup === false
     ? 'Questo browser non supporta il filtro integrato: resta quello avanzato, se disponibile.'
@@ -1781,7 +1795,7 @@ function renderTiles() {
       const m = voice.members.get(id);
       if (!m) continue;
       wanted.set('cam:' + id, { id, kind: 'cam', stream: peer.streams.cam, label: dname(id, m.username), video: m.cam, muted: m.muted, deaf: m.deaf });
-      if (m.screen) wanted.set('scr:' + id, { id, kind: 'screen', stream: peer.streams.screen, label: 'Schermo di ' + dname(id, m.username), video: true });
+      if (m.screen) wanted.set('scr:' + id, { id, kind: 'screen', stream: peer.watching ? peer.streams.screen : null, label: 'Schermo di ' + dname(id, m.username), video: !!peer.watching, remote: true, watching: !!peer.watching });
     }
   }
   for (const [key, t] of tiles) {
@@ -1807,10 +1821,21 @@ function renderTiles() {
     if (w.kind === 'cam') {
       const a = avatar(w.id, pinKey ? 40 : 84);
       t.ph.replaceChildren(a);
+    } else if (w.remote && !w.watching) {
+      t.ph.replaceChildren(el('button', {
+        type: 'button', className: 'btn watch-btn', textContent: 'Guarda lo schermo', onclick: () => setWatching(w.id, true),
+        style: 'padding:10px 18px;border:0;border-radius:10px;background:#8b5cf6;color:#fff;font:inherit;font-weight:600;cursor:pointer;pointer-events:auto',
+      }));
     } else t.ph.replaceChildren();
+    t.stopW && t.stopW.remove();
+    t.stopW = null;
+    if (w.remote && w.watching) {                  // smettere di guardare: il video non viene più inviato
+      t.stopW = iconBtn('x', 'Smetti di guardare', () => setWatching(w.id, false));
+      t.tc.prepend(t.stopW);
+    }
     // volume: solo sulle persone degli altri
     t.vol && t.vol.remove();
-    if (w.kind === 'screen' && me && w.id !== me.id && peerHasScreenAudio(w.id)) {
+    if (w.kind === 'screen' && me && w.id !== me.id && w.watching && peerHasScreenAudio(w.id)) {
       t.vol = iconBtn(volOf('s' + w.id).m ? 'volume-x' : 'volume', 'Volume audio dello schermo', (e) => showProfile(w.id, e, true));
       t.vol.dataset.keepPop = '1';
       t.tc.prepend(t.vol);
@@ -1878,6 +1903,10 @@ function onVoiceState(m) {
   for (const id of [...voice.peers.keys()]) {
     const pm = voice.members.get(id);
     if (!pm || pm.channel !== voice.channel) closePeer(id);
+  }
+  for (const [id, peer] of voice.peers) {          // ha smesso di condividere: la prossima volta si ricomincia da "Guarda"
+    const pm = voice.members.get(id);
+    if (peer.watching && !(pm && pm.screen)) peer.watching = false;
   }
   renderAll();
 }
@@ -1993,6 +2022,7 @@ async function toggleScreen() {
     if (voice.scrAudio) voice.scrAudio.stop();
     stopAppAudio();
     voice.scr = voice.scrAudio = voice.scrStream = null;
+    for (const p of voice.peers.values()) p.watchedBy = false;
   } else {
     try {
       const s = await navigator.mediaDevices.getDisplayMedia({
@@ -2010,7 +2040,15 @@ async function toggleScreen() {
       voice.scrAudio = au;
       voice.scrStream = new MediaStream([t]);
       if (!au && !window.hstleApp) note('Schermo condiviso senza audio: nella finestra di scelta spunta "Condividi anche l\'audio" (solo Chrome ed Edge, e non con una singola finestra).');
-    } catch { return; }       // annullato dalla persona
+    } catch (e) {
+      // "annullato dalla persona" non è un errore; tutto il resto (portale Wayland, PipeWire, audio) va detto
+      let why = '';
+      if (window.hstleApp && hstleApp.shareError) why = await hstleApp.shareError().catch(() => '');
+      console.warn('condivisione schermo:', e && e.name, e && e.message);
+      if (why) note('Condivisione schermo non partita: ' + why);
+      else if (e && e.name && e.name !== 'NotAllowedError' && e.name !== 'AbortError' && e.name !== 'NotFoundError') note('Condivisione schermo non partita (' + e.name + (e.message ? ': ' + e.message : '') + ').');
+      return;
+    }
   }
   afterLocalChange();
 }
@@ -2078,9 +2116,19 @@ function stopAppAudio() {
 /* ---------- connessioni WebRTC ---------- */
 function sdpOf(d) { return { type: d.type, sdp: d.sdp }; }
 function sendSignal(to, data) { sendWs({ t: 'signal', to, data }); }
+/** Guardare o no lo schermo di un altro: finché non premi "Guarda" il video non ti viene nemmeno inviato. */
+function setWatching(id, on) {
+  const peer = voice.peers.get(id);
+  if (!peer || peer.watching === on) return;
+  peer.watching = on;
+  sendSignal(id, { watch: on });
+  if (on) pinKey = 'scr:' + id;
+  renderTiles();
+}
 
 function attachLocalTracks(peer) {
-  const want = [voice.mic, voice.cam, voice.scr, voice.scrAudio];
+  // schermo e audio dello schermo partono verso una persona solo se ha premuto "Guarda" (peer.watchedBy)
+  const want = [voice.mic, voice.cam, peer.watchedBy ? voice.scr : null, peer.watchedBy ? voice.scrAudio : null];
   peer.pc.getTransceivers().slice(0, 4).forEach((tr, i) => {
     const track = want[i] || null;
     if (tr.sender.track === track) return;
@@ -2124,6 +2172,8 @@ function createPeer(id, offerer) {
     id, pc, offerer,
     session: offerer ? Math.random().toString(36).slice(2) : null,
     pendingIce: [],
+    watching: false,      // io sto guardando il suo schermo
+    watchedBy: false,     // lui sta guardando il mio
     streams: { mic: new MediaStream(), cam: new MediaStream(), screen: new MediaStream(), sa: new MediaStream() },
     audio: null, gain: null, sa: null,
   };
@@ -2230,6 +2280,11 @@ function onSignal(m) {
 }
 async function handleSignal(from, data) {
   if (!voice.active) return;
+  if (typeof data.watch === 'boolean') {           // un altro chiede (o smette di chiedere) di guardare il mio schermo
+    const w = voice.peers.get(from);
+    if (w) { w.watchedBy = data.watch; attachLocalTracks(w); }
+    return;
+  }
   let peer = voice.peers.get(from);
   if (data.sdp && data.sdp.type === 'offer') {
     if (peer && peer.session !== data.session) { closePeer(from); peer = null; }
