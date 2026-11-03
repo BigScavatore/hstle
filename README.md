@@ -184,6 +184,17 @@ vedono nella chat; gli altri file si scaricano con un clic.
   `{id, name, mime, size}`; poi il messaggio WebSocket `send` / `dm_send` ha il campo `file` con quell'id.
   `GET /api/files/{id}` scarica.
 
+## Riduzione del rumore
+
+Con l'interruttore acceso il microfono passa da **RNNoise**, una piccola rete neurale per togliere i rumori
+(tastiera, ventola, clic) compilata in WebAssembly e caricata in un AudioWorklet: gira nel browser di chi parla,
+non sul server. Il file (`server/static/rnnoise-worklet.js`, circa 2 MB) si scarica solo la prima volta che serve.
+Se il browser non lo supporta o non si carica, Hstle ripiega sul filtro integrato del browser.
+
+Il file è generato dal pacchetto [`@timephy/rnnoise-wasm`](https://github.com/timephy/rnnoise-wasm) (licenza
+Apache 2.0, derivato da `@jitsi/rnnoise-wasm`), che contiene [RNNoise](https://github.com/xiph/rnnoise) (licenza BSD),
+unito in un solo file con esbuild.
+
 ## Build per il server
 
 ```bash

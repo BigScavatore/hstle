@@ -1549,10 +1549,39 @@ function playSound(kind) {
 
 /* ---------- riduzione del rumore ---------- */
 // channelCount: 1 = microfono mono: con alcuni microfoni (USB, cuffie) l'altro canale è vuoto e dall'altra parte si sentirebbe da un lato solo
-function micConstraints(id) {
-  const c = { echoCancellation: true, noiseSuppression: ns, autoGainControl: true, channelCount: 1 };
+// `browserNs`: filtro integrato del browser. Il filtro avanzato (RNNoise) lo sostituisce, per non filtrare due volte.
+function micConstraints(id, browserNs = ns) {
+  const c = { echoCancellation: true, noiseSuppression: browserNs, autoGainControl: true, channelCount: 1 };
   if (id) c.deviceId = { exact: id };
   return c;
+}
+async function openMicStream(browserNs) {
+  const md = navigator.mediaDevices;
+  if (dev.mic) {
+    try { return await md.getUserMedia({ audio: micConstraints(dev.mic, browserNs) }); }
+    catch (e) { if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) throw e; }   // dispositivo sparito: uso quello predefinito
+  }
+  return md.getUserMedia({ audio: micConstraints(undefined, browserNs) });
+}
+/* Filtro antirumore avanzato: RNNoise (rete neurale piccola, compilata in WebAssembly) in un AudioWorklet.
+   Toglie tastiera, ventola e rumori che il filtro del browser lascia passare. Il file si scarica solo se serve. */
+async function rnnoiseTrack(raw) {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000, latencyHint: 'interactive' });
+  try {
+    await ctx.audioWorklet.addModule('/rnnoise-worklet.js');
+    const node = new AudioWorkletNode(ctx, 'NoiseSuppressorWorklet', { channelCount: 1, channelCountMode: 'explicit', numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
+    const src = ctx.createMediaStreamSource(new MediaStream([raw]));
+    const dst = ctx.createMediaStreamDestination();
+    src.connect(node);
+    node.connect(dst);
+    await ctx.resume();
+    const out = dst.stream.getAudioTracks()[0];
+    const stop = out.stop.bind(out);
+    out.stop = () => { stop(); raw.stop(); ctx.close().catch(() => {}); };        // fermare il filtro ferma anche il microfono vero
+    raw.onended = () => { if (out.onended) out.onended(new Event('ended')); };       // microfono scollegato
+    out.hstleFiltered = true;
+    return out;
+  } catch (e) { ctx.close().catch(() => {}); throw e; }
 }
 /* ---------- microfono, cuffie, camera ---------- */
 const dev = { mic: lsGet('hstle-mic') || '', spk: lsGet('hstle-spk') || '', cam: lsGet('hstle-cam') || '' };
@@ -1569,13 +1598,13 @@ function micErrorText(e) {
 }
 async function getMic() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('nomedia');
-  let s;
-  if (dev.mic) {
-    try { s = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(dev.mic) }); }
-    catch (e) { if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) throw e; }   // dispositivo sparito: uso quello predefinito
+  let t = null;
+  if (ns && window.AudioWorkletNode) {                                    // prima il filtro avanzato...
+    const s = await openMicStream(false);
+    try { t = await rnnoiseTrack(s.getAudioTracks()[0]); }
+    catch { s.getTracks().forEach((x) => x.stop()); t = null; }
   }
-  if (!s) s = await navigator.mediaDevices.getUserMedia({ audio: micConstraints() });
-  const t = s.getAudioTracks()[0];
+  if (!t) t = (await openMicStream(ns)).getAudioTracks()[0];              // ...altrimenti quello del browser (o nessuno)
   t.onended = () => { if (voice.mic === t && voice.active) { voice.mic = null; note('Il microfono si è scollegato: tocca il microfono per riprovare.'); renderAll(); } };
   return t;
 }
@@ -1702,8 +1731,8 @@ if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
 function renderNsNote() {
   const sup = navigator.mediaDevices && navigator.mediaDevices.getSupportedConstraints && navigator.mediaDevices.getSupportedConstraints().noiseSuppression;
   $('nsNote').textContent = sup === false
-    ? 'Questo browser non supporta la riduzione del rumore: l\'interruttore non avrà effetto.'
-    : 'È il filtro integrato nel browser: non usa il server e non pesa sulla sua memoria.';
+    ? 'Questo browser non supporta il filtro integrato: resta quello avanzato, se disponibile.'
+    : 'Filtro avanzato (RNNoise) che toglie anche tastiera e ventola; se il browser non lo regge usa quello integrato. Gira sul tuo computer, non sul server.';
 }
 async function setNs(on) {
   ns = on;
@@ -1711,11 +1740,7 @@ async function setNs(on) {
   $('nsToggle').checked = on;
   renderControls();
   if (!voice.mic) return;
-  try {
-    await voice.mic.applyConstraints(micConstraints());
-    if (voice.mic.getSettings().noiseSuppression === on) return;
-  } catch {}
-  try { await setMicTrack(await getMic()); }          // il browser non cambia al volo: riapro il microfono
+  try { await setMicTrack(await getMic()); }          // riapro il microfono con o senza filtro
   catch { note('Non riesco a cambiare la riduzione del rumore.'); }
 }
 $('nsToggle').onchange = (e) => setNs(e.target.checked);

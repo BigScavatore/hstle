@@ -93,6 +93,7 @@ async fn main() {
         .route("/app.css", get(app_css))
         .route("/app.js", get(app_js))
         .route("/favicon.svg", get(favicon))
+        .route("/rnnoise-worklet.js", get(rnnoise_worklet))
         .route("/manifest.webmanifest", get(manifest))
         .route("/icon-192.png", get(icon192))
         .route("/icon-512.png", get(icon512))
@@ -142,6 +143,17 @@ async fn app_js() -> impl IntoResponse {
             (header::CACHE_CONTROL, "no-cache"),
         ],
         include_str!("../static/app.js"),
+    )
+}
+
+/// Filtro antirumore (RNNoise compilato in WebAssembly): il browser lo scarica solo se serve.
+async fn rnnoise_worklet() -> impl IntoResponse {
+    (
+        [
+            (header::CONTENT_TYPE, "text/javascript; charset=utf-8"),
+            (header::CACHE_CONTROL, "public, max-age=86400"),
+        ],
+        include_str!("../static/rnnoise-worklet.js"),
     )
 }
 
