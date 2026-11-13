@@ -2025,12 +2025,21 @@ async function toggleScreen() {
     for (const p of voice.peers.values()) p.watchedBy = false;
   } else {
     try {
-      const s = await navigator.mediaDevices.getDisplayMedia({
-        video: shareVideo(),
-        // l'audio del computer: niente filtri (rovinerebbero musica e giochi) e, per le schede, non si risente in locale
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, suppressLocalAudioPlayback: true, restrictOwnAudio: true },
-        systemAudio: 'include',
-      });
+      let s, noAudio = false;
+      try {
+        s = await navigator.mediaDevices.getDisplayMedia({
+          video: shareVideo(),
+          // l'audio del computer: niente filtri (rovinerebbero musica e giochi) e, per le schede, non si risente in locale
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, suppressLocalAudioPlayback: true, restrictOwnAudio: true },
+          systemAudio: 'include',
+        });
+      } catch (e) {
+        // l'audio del computer non parte (su Linux capita senza PulseAudio/PipeWire): invece di perdere tutto, solo video
+        if (!(e && e.name === 'NotReadableError' && /audio/i.test(e.message || ''))) throw e;
+        console.warn('audio dello schermo non partito, riprovo senza:', e.message);
+        s = await navigator.mediaDevices.getDisplayMedia({ video: shareVideo(), audio: false });
+        noAudio = true;
+      }
       const t = s.getVideoTracks()[0];
       let au = s.getAudioTracks()[0] || null;
       if (!au && window.hstleApp && await hstleApp.appAudioActive().catch(() => false)) au = await appAudioTrack();   // app desktop: audio di una sola app
@@ -2039,7 +2048,10 @@ async function toggleScreen() {
       voice.scr = t;
       voice.scrAudio = au;
       voice.scrStream = new MediaStream([t]);
-      if (!au && !window.hstleApp) note('Schermo condiviso senza audio: nella finestra di scelta spunta "Condividi anche l\'audio" (solo Chrome ed Edge, e non con una singola finestra).');
+      if (noAudio) note('L\'audio del computer non è partito: condivido solo il video. Su Linux serve PulseAudio o PipeWire (pipewire-pulse).');
+      else if (!au && !window.hstleApp) note(/Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent)
+        ? 'Schermo condiviso senza audio: su Linux il browser dà l\'audio solo condividendo una scheda. Per lo schermo intero con l\'audio usa l\'app desktop di Hstle.'
+        : 'Schermo condiviso senza audio: nella finestra di scelta spunta "Condividi anche l\'audio" (solo Chrome ed Edge, e non con una singola finestra).');
     } catch (e) {
       // "annullato dalla persona" non è un errore; tutto il resto (portale Wayland, PipeWire, audio) va detto
       let why = '';
@@ -2136,7 +2148,21 @@ function attachLocalTracks(peer) {
   });
 }
 const MAX_BITRATE = [64000, 700000, 2500000, 96000];
-const maxBitrate = (i) => i === 2 && shareMode === 'motion' ? 4000000 : MAX_BITRATE[i];
+// Ogni persona che guarda riceve una sua copia dello schermo (connessioni dirette, niente server video): con 4 Mbps
+// a testa, tre spettatori chiedono 12 Mbps in upload e la stream si inceppa. Dividiamo un budget totale tra chi guarda.
+const SCREEN_BUDGET = 8000000, SCREEN_MIN = 1200000;
+function maxBitrate(i) {
+  if (i !== 2) return MAX_BITRATE[i];
+  const top = shareMode === 'motion' ? 4000000 : MAX_BITRATE[2];
+  let n = 0;
+  for (const p of voice.peers.values()) if (p.watchedBy) n++;
+  return Math.max(SCREEN_MIN, Math.min(top, Math.floor(SCREEN_BUDGET / Math.max(1, n))));
+}
+/** Quando cambia il numero di spettatori, ricalcola il bitrate dello schermo per tutti. */
+function rebalanceScreen() {
+  if (!voice.scr) return;
+  for (const p of voice.peers.values()) if (p.watchedBy) limitBitrate(p, 2);
+}
 // Fluidità: al massimo 720p ma fino a 60 fotogrammi al secondo (meno pixel da codificare = meno lag).
 // Nitidezza: fino a 1080p ma pochi fotogrammi, per testo e programmi.
 function shareVideo() {
@@ -2263,7 +2289,9 @@ function closePeer(id) {
   if (peer.sa) peer.sa.audio.srcObject = null;
   try { peer.src && peer.src.disconnect(); peer.gain && peer.gain.disconnect(); peer.sa && peer.sa.src && peer.sa.src.disconnect(); peer.sa && peer.sa.gain && peer.sa.gain.disconnect(); } catch {}
   watchers.delete('p' + id);
+  const wasWatching = peer.watchedBy;
   voice.peers.delete(id);
+  if (wasWatching) rebalanceScreen();          // uno spettatore in meno: più banda agli altri
   renderTiles();
 }
 async function makeOffer(peer) {
@@ -2282,7 +2310,7 @@ async function handleSignal(from, data) {
   if (!voice.active) return;
   if (typeof data.watch === 'boolean') {           // un altro chiede (o smette di chiedere) di guardare il mio schermo
     const w = voice.peers.get(from);
-    if (w) { w.watchedBy = data.watch; attachLocalTracks(w); }
+    if (w) { w.watchedBy = data.watch; attachLocalTracks(w); rebalanceScreen(); }
     return;
   }
   let peer = voice.peers.get(from);
